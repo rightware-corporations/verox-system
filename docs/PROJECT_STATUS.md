@@ -8,49 +8,69 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **PHASE 1 — Core Platform**
 
-Status: **IN PROGRESS**
+Status: **IMPLEMENTED — RUNTIME/CI VALIDATION PENDING**
 
-## Completed
+## Completed in implementation
 
 - Product boundary defined
 - Hosted checkout ownership defined
 - Payment source-of-truth rule defined
 - MVP repository structure defined
-- Backend technology selected
-- Initial PostgreSQL baseline migration defined
-- Health/Actuator foundation defined
-- Merchant domain model implemented
-- API key generation and SHA-256 storage implemented
-- Stateless Bearer API key authentication implemented
-- `GET /v1/account` authentication probe implemented
-- One-time MVP merchant bootstrap implemented
-- Authentication unit tests added
+- Java 21 / Spring Boot backend foundation
+- PostgreSQL + Flyway baseline
+- Health/Actuator foundation
+- Merchant domain model
+- API key generation and SHA-256 storage
+- Stateless Bearer API key authentication
+- `GET /v1/account`
+- One-time MVP merchant bootstrap
+- Checkout Session schema and domain model
+- Payment schema and domain model
+- `POST /v1/checkout/sessions`
+- `GET /v1/checkout/sessions/{id}`
+- `GET /v1/payments/{id}`
+- Merchant-scoped resource access
+- Amount normalization to MZN minor units
+- Idempotency-Key request fingerprinting
+- Non-enumerable `cs_*` and `pay_*` public identifiers
+- Hosted checkout URL generation
+- API error envelope
+- Core authentication and checkout unit tests
 
-## Current task
+## Current validation gate
 
-`VX-CORE-003 — CheckoutSession + Payment creation`
+`VX-CORE-VALIDATE — Core Platform runtime validation`
 
 Definition of Done:
 
-- authenticated merchant can create a Checkout Session
-- Checkout Session and Payment are created atomically
-- merchant `external_reference` is preserved
-- amount is stored in minor units
-- idempotency key prevents duplicate creation
-- a non-enumerable hosted checkout URL is returned
-- merchant can retrieve its own Checkout Session and Payment
-- another merchant cannot retrieve them
+- PostgreSQL starts successfully
+- Flyway V1 and V2 migrations apply successfully
+- backend compiles on Java 21
+- unit tests pass
+- backend starts with PostgreSQL
+- `/actuator/health` returns `UP`
+- bootstrap creates one merchant and one API key
+- valid API key returns `200` from `/v1/account`
+- invalid API key returns `401`
+- checkout creation persists one Checkout Session and one Payment atomically
+- repeated identical Idempotency-Key returns the existing Checkout Session
+- different payload with the same Idempotency-Key returns `409`
 
-## Validation pending
+## Next phase
 
-`VX-CORE-001` and `VX-CORE-002` are implemented in `main`, but CI/runtime validation is still required before marking them fully verified.
+**PHASE 2 — Hosted Checkout**
 
-## Next tasks
+First tasks after the validation gate:
 
-1. `VX-CORE-003 — CheckoutSession + Payment creation`
-2. Hosted Checkout frontend bootstrap
-3. Customer evidence upload
-4. Provider evidence bridge
+1. bootstrap `frontend/checkout` with TypeScript / TSX
+2. expose public Checkout Session read model
+3. render payment summary and M-Pesa instructions
+4. implement customer evidence upload
+5. implement verifying/success/failure checkout states
+
+## Validation note
+
+The repository CI workflow is configured for backend changes, but this environment cannot read push-triggered GitHub Actions runs through the available connector. Local network access to GitHub/Maven is also unavailable here, so runtime/CI verification remains an explicit project gate rather than being assumed complete.
 
 ## Scope rule
 
