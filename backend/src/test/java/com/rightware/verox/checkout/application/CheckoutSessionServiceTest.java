@@ -18,6 +18,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,7 +39,7 @@ class CheckoutSessionServiceTest {
             .thenReturn(Optional.empty());
         when(ids.generate("cs")).thenReturn("cs_test123");
         when(ids.generate("pay")).thenReturn("pay_test123");
-        when(fingerprint.create(any(Long.class), any(), any(), any(), any(), any())).thenReturn("fingerprint");
+        when(fingerprint.create(anyLong(), any(), any(), any(), any(), any())).thenReturn("fingerprint");
 
         CheckoutSessionService service = new CheckoutSessionService(
             checkoutRepository,
@@ -101,7 +102,7 @@ class CheckoutSessionServiceTest {
         when(merchantRepository.findById(merchant.getId())).thenReturn(Optional.of(merchant));
         when(checkoutRepository.findByMerchantIdAndIdempotencyKey(merchant.getId(), "order-100"))
             .thenReturn(Optional.of(existing));
-        when(fingerprint.create(any(Long.class), any(), any(), any(), any(), any())).thenReturn("new-fingerprint");
+        when(fingerprint.create(anyLong(), any(), any(), any(), any(), any())).thenReturn("new-fingerprint");
 
         CheckoutSessionService service = new CheckoutSessionService(
             checkoutRepository,
