@@ -29,6 +29,12 @@ management:
       probes:
         enabled: true
 
+verox:
+  bootstrap:
+    enabled: ${VEROX_BOOTSTRAP_ENABLED:false}
+    merchant-name: ${VEROX_BOOTSTRAP_MERCHANT_NAME:VEROX MVP Merchant}
+    environment: ${VEROX_BOOTSTRAP_ENVIRONMENT:TEST}
+
 logging:
   level:
     root: INFO
