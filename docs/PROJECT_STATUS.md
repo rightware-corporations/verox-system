@@ -19,25 +19,38 @@ Status: **IN PROGRESS**
 - Backend technology selected
 - Initial PostgreSQL baseline migration defined
 - Health/Actuator foundation defined
+- Merchant domain model implemented
+- API key generation and SHA-256 storage implemented
+- Stateless Bearer API key authentication implemented
+- `GET /v1/account` authentication probe implemented
+- One-time MVP merchant bootstrap implemented
+- Authentication unit tests added
 
 ## Current task
 
-`VX-CORE-001 — Bootstrap backend`
+`VX-CORE-003 — CheckoutSession + Payment creation`
 
 Definition of Done:
 
-- Spring Boot application exists
-- PostgreSQL configuration exists
-- Flyway baseline exists
-- Health endpoint is exposed
-- Local database can be started from Docker Compose
-- Application can start against the local database
+- authenticated merchant can create a Checkout Session
+- Checkout Session and Payment are created atomically
+- merchant `external_reference` is preserved
+- amount is stored in minor units
+- idempotency key prevents duplicate creation
+- a non-enumerable hosted checkout URL is returned
+- merchant can retrieve its own Checkout Session and Payment
+- another merchant cannot retrieve them
+
+## Validation pending
+
+`VX-CORE-001` and `VX-CORE-002` are implemented in `main`, but CI/runtime validation is still required before marking them fully verified.
 
 ## Next tasks
 
-1. `VX-CORE-002 — Merchant + API Key authentication`
-2. `VX-CORE-003 — CheckoutSession + Payment creation`
-3. Hosted Checkout frontend bootstrap
+1. `VX-CORE-003 — CheckoutSession + Payment creation`
+2. Hosted Checkout frontend bootstrap
+3. Customer evidence upload
+4. Provider evidence bridge
 
 ## Scope rule
 
