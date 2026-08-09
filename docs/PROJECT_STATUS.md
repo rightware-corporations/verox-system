@@ -8,17 +8,23 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **PHASE 2 — Backend Completion / Evidence Infrastructure**
 
-Status: **IN PROGRESS**
+Status: **IN PROGRESS — EVIDENCE MODEL IMPLEMENTED, LOCAL VALIDATION PENDING**
 
 Current task:
 
-`VX-EVIDENCE-01 — Define and implement customer/provider evidence persistence model`
+`VX-EVIDENCE-01-VALIDATE — Validate V3 evidence schema and evidence tests locally`
+
+Next task after validation:
+
+`VX-BRIDGE-01 — Implement VEROX Bridge credential/domain model and raw provider SMS ingestion`
 
 ## Delivery strategy
 
 Backend-first for the MVP. The Hosted Checkout frontend will be implemented only after the backend payment-verification flow is complete and deployable.
 
 The local Windows environment is used only for development and validation. Production/staging deployment target is Railway.
+
+Runtime component names and boundaries are locked in `docs/architecture/runtime-components.md`: VEROX Server, VEROX Merchant API, VEROX Hosted Checkout, VEROX Bridge, VEROX Evidence Infrastructure, VEROX Verification Engine and VEROX Webhook Delivery are separate responsibilities even while the MVP is deployed as one modular-monolith backend process.
 
 ## Phase 1 — Core Platform
 
@@ -86,15 +92,33 @@ Status: **DONE — LOCAL RUNTIME VALIDATED**
 
 ## Phase 2 — Backend Completion / Evidence Infrastructure
 
-Planned tasks:
+### Implemented — validation pending
 
-1. evidence persistence model for customer proof and provider SMS
-2. public Checkout Session read model for Hosted Checkout
-3. customer evidence upload endpoint with file type/size validation
-4. storage abstraction for evidence objects
-5. bridge credential/domain model
-6. `POST /v1/bridges/{bridgeId}/evidence` raw SMS ingestion
-7. evidence duplicate/replay protection and audit metadata
+- VEROX runtime component/layer naming boundaries documented
+- Flyway V3 `evidences` schema
+- non-enumerable `ev_*` Evidence IDs
+- evidence origin model: `CUSTOMER`, `PROVIDER`
+- evidence kind model: `IMAGE`, `SMS`, `PDF`, `TEXT`, `JSON`
+- ingestion source model: `HOSTED_CHECKOUT`, `VEROX_BRIDGE`, `PROVIDER_API`, `INTERNAL`
+- SHA-256 evidence content hashing
+- customer evidence can be linked directly to a Payment
+- provider evidence can be persisted unlinked before matching, so provider SMS may arrive before customer proof
+- unlinked provider evidence query support
+- duplicate provider evidence protection by merchant/content hash
+- duplicate customer evidence protection by payment/content hash
+- Evidence service separates provider/Bridge ingestion from customer/Hosted Checkout ingestion
+- Verification Engine can later link provider evidence to a Payment without changing evidence content
+- evidence hashing and ingestion unit tests added
+
+### Remaining tasks
+
+1. validate Flyway V3 and new evidence tests locally
+2. bridge credential/domain model
+3. `POST /v1/bridges/{bridgeId}/evidence` raw SMS ingestion
+4. evidence storage abstraction for uploaded objects
+5. customer evidence upload endpoint with file type/size validation
+6. evidence audit/replay hardening under concurrent ingestion
+7. public Checkout Session read model required by the later Hosted Checkout frontend
 
 ## Phase 3 — Verification Engine
 
@@ -153,16 +177,17 @@ The backend is not considered complete until:
 
 1. merchant creates a Checkout Session
 2. customer evidence can be uploaded and persisted
-3. official M-Pesa SMS can be ingested through the bridge endpoint
-4. VEROX parses both evidence sources
-5. VEROX compares and evaluates the evidence
-6. ambiguous evidence becomes `REVIEW_REQUIRED`, never guessed as confirmed
-7. matched evidence transitions Payment to `CONFIRMED`
-8. duplicate/replayed evidence cannot confirm multiple payments
-9. VEROX emits an HMAC-signed merchant webhook
-10. failed webhook deliveries are retried safely
-11. the flow runs on Railway with PostgreSQL and durable evidence storage
-12. no manual database intervention is required
+3. official M-Pesa SMS can be ingested through the VEROX Bridge endpoint
+4. provider evidence can safely arrive before or after customer evidence
+5. VEROX parses both evidence sources
+6. VEROX compares and evaluates the evidence
+7. ambiguous evidence becomes `REVIEW_REQUIRED`, never guessed as confirmed
+8. matched evidence transitions Payment to `CONFIRMED`
+9. duplicate/replayed evidence cannot confirm multiple payments
+10. VEROX emits an HMAC-signed merchant webhook
+11. failed webhook deliveries are retried safely
+12. the flow runs on Railway with PostgreSQL and durable evidence storage
+13. no manual database intervention is required
 
 ## Scope rule
 
