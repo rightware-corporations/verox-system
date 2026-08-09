@@ -8,15 +8,15 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **PHASE 2 — Backend Completion / Evidence Infrastructure**
 
-Status: **IN PROGRESS — EVIDENCE MODEL IMPLEMENTED, LOCAL VALIDATION PENDING**
+Status: **IN PROGRESS — EVIDENCE VALIDATED; VEROX BRIDGE IMPLEMENTED, LOCAL VALIDATION PENDING**
 
 Current task:
 
-`VX-EVIDENCE-01-VALIDATE — Validate V3 evidence schema and evidence tests locally`
+`VX-BRIDGE-01-VALIDATE — Validate V4 Bridge schema, dedicated authentication and raw provider SMS ingestion locally`
 
 Next task after validation:
 
-`VX-BRIDGE-01 — Implement VEROX Bridge credential/domain model and raw provider SMS ingestion`
+`VX-EVIDENCE-02 — Implement durable evidence storage abstraction and customer evidence upload endpoint`
 
 ## Delivery strategy
 
@@ -64,7 +64,6 @@ Status: **DONE — LOCAL RUNTIME VALIDATED**
 - Java runtime available
 - Maven Wrapper 3.9.16 works
 - backend compiles successfully with `release 21`
-- 6 unit tests pass, 0 failures, 0 errors
 - PostgreSQL 18.4 installed and running
 - local `verox` role/database connection works
 - Flyway V1 and V2 migrations apply successfully
@@ -92,7 +91,9 @@ Status: **DONE — LOCAL RUNTIME VALIDATED**
 
 ## Phase 2 — Backend Completion / Evidence Infrastructure
 
-### Implemented — validation pending
+### VX-EVIDENCE-01 — DONE / LOCAL RUNTIME VALIDATED
+
+Implemented and validated:
 
 - VEROX runtime component/layer naming boundaries documented
 - Flyway V3 `evidences` schema
@@ -108,17 +109,49 @@ Status: **DONE — LOCAL RUNTIME VALIDATED**
 - duplicate customer evidence protection by payment/content hash
 - Evidence service separates provider/Bridge ingestion from customer/Hosted Checkout ingestion
 - Verification Engine can later link provider evidence to a Payment without changing evidence content
-- evidence hashing and ingestion unit tests added
+- 11 local tests passed with 0 failures and 0 errors before Bridge implementation
+- Flyway V3 applied successfully in local PostgreSQL
+- `evidences` table exists in local PostgreSQL
+- `flyway_schema_history` records version `3` / `evidence infrastructure` with `success = true`
 
-### Remaining tasks
+### VX-BRIDGE-01 — IMPLEMENTED / LOCAL VALIDATION PENDING
 
-1. validate Flyway V3 and new evidence tests locally
-2. bridge credential/domain model
-3. `POST /v1/bridges/{bridgeId}/evidence` raw SMS ingestion
-4. evidence storage abstraction for uploaded objects
-5. customer evidence upload endpoint with file type/size validation
-6. evidence audit/replay hardening under concurrent ingestion
-7. public Checkout Session read model required by the later Hosted Checkout frontend
+Implemented:
+
+- Flyway V4 `bridges` and `bridge_credentials` schema
+- non-enumerable `brg_*` Bridge IDs
+- dedicated `vx_bridge_*` credential namespace
+- bridge credentials are SHA-256 hashed at rest
+- Bridge status and credential status models
+- Bridge is scoped to a Merchant and provider
+- dedicated VEROX Bridge authentication principal and filter
+- Merchant API key filter explicitly excludes Bridge endpoints
+- security roles separate `ROLE_BRIDGE` from `ROLE_MERCHANT`
+- bridge credential cannot be used against another `bridgeId`
+- one-time Bridge bootstrap provisioning for MVP/local setup
+- `POST /v1/bridges/{bridgeId}/evidence`
+- raw Bridge payload is persisted as `Evidence(PROVIDER, SMS, VEROX_BRIDGE)`
+- provider evidence remains unlinked to Payment until Verification Engine matching
+- duplicate provider SMS returns the existing Evidence instead of creating a second immutable evidence record
+- Bridge provisioning/authentication and ingestion/scoping unit tests added
+
+Validation gate:
+
+1. run complete local test suite
+2. apply Flyway V4 successfully
+3. provision one local `brg_*` Bridge and `vx_bridge_*` credential
+4. confirm merchant `vx_test_*` credential cannot authenticate a Bridge endpoint
+5. confirm Bridge credential cannot authenticate Merchant API endpoints
+6. post raw M-Pesa SMS through the Bridge endpoint
+7. confirm `ev_*` provider Evidence is persisted without `payment_id`
+8. replay the same SMS and confirm no duplicate Evidence row is created
+
+### Remaining Phase 2 tasks after Bridge validation
+
+1. durable evidence storage abstraction for uploaded objects
+2. customer evidence upload endpoint with file type/size validation
+3. evidence audit/replay hardening under concurrent ingestion
+4. public Checkout Session read model required by the later Hosted Checkout frontend
 
 ## Phase 3 — Verification Engine
 
