@@ -25,6 +25,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String API_PATH_PREFIX = "/v1/";
+    private static final String BRIDGE_PATH_PREFIX = "/v1/bridges/";
 
     private final ApiKeyService apiKeyService;
 
@@ -34,7 +35,8 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith(API_PATH_PREFIX);
+        String uri = request.getRequestURI();
+        return !uri.startsWith(API_PATH_PREFIX) || uri.startsWith(BRIDGE_PATH_PREFIX);
     }
 
     @Override
