@@ -6,12 +6,14 @@ import com.rightware.verox.evidence.domain.EvidenceIngestSource;
 import com.rightware.verox.evidence.domain.EvidenceKind;
 import com.rightware.verox.evidence.domain.EvidenceOrigin;
 import com.rightware.verox.evidence.repository.EvidenceRepository;
+import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.payment.domain.Payment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class EvidenceService {
@@ -31,9 +33,8 @@ public class EvidenceService {
     }
 
     @Transactional
-    public Evidence registerRaw(
-        Payment payment,
-        EvidenceOrigin origin,
+    public Evidence registerProviderRaw(
+        Merchant merchant,
         EvidenceKind kind,
         EvidenceIngestSource ingestSource,
         String provider,
@@ -41,32 +42,35 @@ public class EvidenceService {
         Instant occurredAt,
         Instant receivedAt
     ) {
-        Objects.requireNonNull(payment, "payment");
+        Objects.requireNonNull(merchant, "merchant");
         String contentSha256 = contentHasher.sha256(rawContent);
 
-        return existing(payment, origin, kind, contentSha256)
-            .orElseGet(() -> evidenceRepository.save(new Evidence(
-                resourceIdGenerator.generate("ev"),
-                payment.getMerchant(),
-                payment,
-                origin,
-                kind,
-                ingestSource,
-                provider,
-                contentSha256,
-                "text/plain",
-                null,
-                null,
-                rawContent,
-                occurredAt,
-                receivedAt
-            )));
+        return evidenceRepository.findByMerchantIdAndOriginAndKindAndContentSha256(
+            merchant.getId(),
+            EvidenceOrigin.PROVIDER,
+            kind,
+            contentSha256
+        ).orElseGet(() -> evidenceRepository.save(new Evidence(
+            resourceIdGenerator.generate("ev"),
+            merchant,
+            null,
+            EvidenceOrigin.PROVIDER,
+            kind,
+            ingestSource,
+            provider,
+            contentSha256,
+            "text/plain",
+            null,
+            null,
+            rawContent,
+            occurredAt,
+            receivedAt
+        )));
     }
 
     @Transactional
-    public Evidence registerStored(
+    public Evidence registerCustomerStored(
         Payment payment,
-        EvidenceOrigin origin,
         EvidenceKind kind,
         EvidenceIngestSource ingestSource,
         String provider,
@@ -78,37 +82,44 @@ public class EvidenceService {
         Instant receivedAt
     ) {
         Objects.requireNonNull(payment, "payment");
+        String normalizedHash = Objects.requireNonNull(contentSha256, "contentSha256").toLowerCase();
 
-        return existing(payment, origin, kind, contentSha256)
-            .orElseGet(() -> evidenceRepository.save(new Evidence(
-                resourceIdGenerator.generate("ev"),
-                payment.getMerchant(),
-                payment,
-                origin,
-                kind,
-                ingestSource,
-                provider,
-                contentSha256,
-                contentType,
-                originalFilename,
-                storageKey,
-                null,
-                occurredAt,
-                receivedAt
-            )));
-    }
-
-    private java.util.Optional<Evidence> existing(
-        Payment payment,
-        EvidenceOrigin origin,
-        EvidenceKind kind,
-        String contentSha256
-    ) {
         return evidenceRepository.findByPaymentIdAndOriginAndKindAndContentSha256(
             payment.getId(),
-            origin,
+            EvidenceOrigin.CUSTOMER,
             kind,
-            contentSha256.toLowerCase()
-        );
+            normalizedHash
+        ).orElseGet(() -> evidenceRepository.save(new Evidence(
+            resourceIdGenerator.generate("ev"),
+            payment.getMerchant(),
+            payment,
+            EvidenceOrigin.CUSTOMER,
+            kind,
+            ingestSource,
+            provider,
+            normalizedHash,
+            contentType,
+            originalFilename,
+            storageKey,
+            null,
+            occurredAt,
+            receivedAt
+        )));
+    }
+
+    @Transactional
+    public Evidence linkProviderEvidence(Evidence evidence, Payment payment) {
+        Objects.requireNonNull(evidence, "evidence");
+        Objects.requireNonNull(payment, "payment");
+        if (evidence.getOrigin() != EvidenceOrigin.PROVIDER) {
+            throw new IllegalArgumentException("Only provider evidence can be linked by the Verification Engine");
+        }
+        evidence.linkToPayment(payment);
+        return evidenceRepository.save(evidence);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Evidence> findForMerchant(UUID merchantId, String publicId) {
+        return evidenceRepository.findByPublicIdAndMerchantId(publicId, merchantId);
     }
 }
