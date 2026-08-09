@@ -31,8 +31,8 @@ public class Evidence {
     @JoinColumn(name = "merchant_id", nullable = false)
     private Merchant merchant;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "payment_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payment_id")
     private Payment payment;
 
     @Enumerated(EnumType.STRING)
@@ -71,6 +71,9 @@ public class Evidence {
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt;
 
+    @Column(name = "linked_at")
+    private Instant linkedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -96,7 +99,7 @@ public class Evidence {
         this.id = UUID.randomUUID();
         this.publicId = requireText(publicId, "publicId");
         this.merchant = Objects.requireNonNull(merchant, "merchant");
-        this.payment = Objects.requireNonNull(payment, "payment");
+        this.payment = payment;
         this.origin = Objects.requireNonNull(origin, "origin");
         this.kind = Objects.requireNonNull(kind, "kind");
         this.ingestSource = Objects.requireNonNull(ingestSource, "ingestSource");
@@ -112,6 +115,7 @@ public class Evidence {
         if (this.storageKey == null && this.rawContent == null) {
             throw new IllegalArgumentException("Evidence requires storageKey or rawContent");
         }
+        validatePaymentMerchant(payment);
     }
 
     @PrePersist
@@ -123,8 +127,34 @@ public class Evidence {
         if (receivedAt == null) {
             receivedAt = now;
         }
+        if (payment != null && linkedAt == null) {
+            linkedAt = now;
+        }
         if (createdAt == null) {
             createdAt = now;
+        }
+    }
+
+    public void linkToPayment(Payment payment) {
+        Objects.requireNonNull(payment, "payment");
+        validatePaymentMerchant(payment);
+        if (this.payment != null && !this.payment.getId().equals(payment.getId())) {
+            throw new IllegalStateException("Evidence is already linked to another Payment");
+        }
+        this.payment = payment;
+        if (this.linkedAt == null) {
+            this.linkedAt = Instant.now();
+        }
+    }
+
+    private void validatePaymentMerchant(Payment payment) {
+        if (payment == null) {
+            return;
+        }
+        Merchant paymentMerchant = payment.getMerchant();
+        if (paymentMerchant == null || paymentMerchant.getId() == null || merchant.getId() == null
+            || !merchant.getId().equals(paymentMerchant.getId())) {
+            throw new IllegalArgumentException("Evidence and Payment must belong to the same Merchant");
         }
     }
 
@@ -210,6 +240,10 @@ public class Evidence {
 
     public Instant getReceivedAt() {
         return receivedAt;
+    }
+
+    public Instant getLinkedAt() {
+        return linkedAt;
     }
 
     public Instant getCreatedAt() {
