@@ -47,8 +47,8 @@ public class SecurityConfig {
                 .requestMatchers("/v1/**").hasRole("MERCHANT")
                 .anyRequest().denyAll()
             )
-            .addFilterBefore(bridgeAuthenticationFilter, ApiKeyAuthenticationFilter.class)
-            .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(bridgeAuthenticationFilter, ApiKeyAuthenticationFilter.class);
 
         return http.build();
     }
