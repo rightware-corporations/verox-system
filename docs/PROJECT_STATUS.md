@@ -6,11 +6,19 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 ## Current phase
 
-**PHASE 1 — Core Platform**
+**PHASE 2 — Hosted Checkout**
 
-Status: **IMPLEMENTED — LOCAL DATABASE/RUNTIME VALIDATION PENDING**
+Status: **IN PROGRESS**
 
-## Completed in implementation
+Current task:
+
+`VX-CHECKOUT-01 — Bootstrap frontend/checkout with TypeScript / TSX`
+
+## Phase 1 — Core Platform
+
+Status: **DONE — LOCAL RUNTIME VALIDATED**
+
+### Completed in implementation
 
 - Product boundary defined
 - Hosted checkout ownership defined
@@ -36,41 +44,43 @@ Status: **IMPLEMENTED — LOCAL DATABASE/RUNTIME VALIDATION PENDING**
 - Hosted checkout URL generation
 - API error envelope
 - Core authentication and checkout unit tests
-- Maven Wrapper added for Windows/local development
+- Maven Wrapper for Windows/local development
+- Spring Boot Flyway starter integration
 
-## Validated locally
+### Validated locally
 
 - Java runtime available
 - Maven Wrapper 3.9.16 works
 - backend compiles successfully with `release 21`
-- 6 unit tests pass
-- 0 test failures
-- 0 test errors
-- Maven build result: `BUILD SUCCESS`
-
-## Current validation gate
-
-`VX-CORE-VALIDATE — Core Platform local database/runtime validation`
-
-Definition of Done:
-
-- PostgreSQL is installed and starts successfully
-- local `verox` database and credentials are configured
+- 6 unit tests pass, 0 failures, 0 errors
+- PostgreSQL 18.4 installed and running
+- local `verox` role/database connection works
 - Flyway V1 and V2 migrations apply successfully
-- backend starts with PostgreSQL
+- backend starts successfully with PostgreSQL
 - `/actuator/health` returns `UP`
-- bootstrap creates one merchant and one API key
-- valid API key returns `200` from `/v1/account`
-- invalid API key returns `401`
-- checkout creation persists one Checkout Session and one Payment atomically
-- repeated identical Idempotency-Key returns the existing Checkout Session
-- different payload with the same Idempotency-Key returns `409`
+- bootstrap provisions a merchant and `vx_test_*` API key
+- valid VEROX API key authenticates successfully on `/v1/account`
+- invalid/non-VEROX credential is rejected by API-key authentication
+- checkout creation returns one `cs_*` Checkout Session and one `pay_*` Payment with `OPEN` / `PENDING`
+- repeated request with identical `Idempotency-Key` and payload returns the exact same Checkout Session and Payment IDs
+- changed payload with the same `Idempotency-Key` returns HTTP `409 Conflict`
 
-## Next phase
+### Validated checkout sample
 
-**PHASE 2 — Hosted Checkout**
+- external reference: `ORDER-82921`
+- amount: `1500.00 MZN`
+- checkout status: `OPEN`
+- payment status: `PENDING`
+- checkout URL generated on local Hosted Checkout base URL
 
-First tasks after the validation gate:
+### Security hygiene
+
+- one-time bootstrap must remain disabled after merchant/API-key provisioning
+- the generated default Spring Security development password is not a VEROX API credential and must not be used by merchant integrations
+
+## Phase 2 — Hosted Checkout
+
+Planned tasks:
 
 1. bootstrap `frontend/checkout` with TypeScript / TSX
 2. expose public Checkout Session read model
