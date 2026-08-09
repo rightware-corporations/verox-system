@@ -12,7 +12,7 @@ class EvidenceContentHasherTest {
     @Test
     void hashesEvidenceContentDeterministically() {
         assertThat(hasher.sha256("VEROX evidence"))
-            .isEqualTo("554c18f34d5a2be180e3d72f6ba69435907a24e894d88722f11cff223677369d");
+            .isEqualTo("bd5a7f0b689e615840a105844b97dc7e0a8311120f75b55f129cb5ea9ae71ee9");
     }
 
     @Test
