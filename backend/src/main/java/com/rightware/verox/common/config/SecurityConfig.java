@@ -1,6 +1,7 @@
 package com.rightware.verox.common.config;
 
 import com.rightware.verox.authentication.web.ApiKeyAuthenticationFilter;
+import com.rightware.verox.bridge.web.BridgeAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +20,8 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(
         HttpSecurity http,
-        ApiKeyAuthenticationFilter apiKeyAuthenticationFilter
+        ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
+        BridgeAuthenticationFilter bridgeAuthenticationFilter
     ) throws Exception {
         http
             .csrf(AbstractHttpConfigurer::disable)
@@ -34,16 +36,18 @@ public class SecurityConfig {
                     response.setCharacterEncoding(StandardCharsets.UTF_8.name());
                     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                     response.getWriter().write(
-                        "{\"error\":{\"code\":\"AUTHENTICATION_REQUIRED\",\"message\":\"A valid VEROX API key is required.\"}}"
+                        "{\"error\":{\"code\":\"AUTHENTICATION_REQUIRED\",\"message\":\"A valid VEROX credential is required.\"}}"
                     );
                 })
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/public/**").permitAll()
-                .requestMatchers("/v1/**").authenticated()
+                .requestMatchers("/v1/bridges/**").hasRole("BRIDGE")
+                .requestMatchers("/v1/**").hasRole("MERCHANT")
                 .anyRequest().denyAll()
             )
+            .addFilterBefore(bridgeAuthenticationFilter, ApiKeyAuthenticationFilter.class)
             .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
