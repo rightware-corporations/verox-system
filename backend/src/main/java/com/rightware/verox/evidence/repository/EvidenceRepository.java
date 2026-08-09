@@ -18,7 +18,8 @@ public interface EvidenceRepository extends JpaRepository<Evidence, UUID> {
     @EntityGraph(attributePaths = {"merchant", "payment"})
     List<Evidence> findAllByPaymentIdOrderByReceivedAtAsc(UUID paymentId);
 
-    boolean existsByPaymentIdAndOriginAndKindAndContentSha256(
+    @EntityGraph(attributePaths = {"merchant", "payment"})
+    Optional<Evidence> findByPaymentIdAndOriginAndKindAndContentSha256(
         UUID paymentId,
         EvidenceOrigin origin,
         EvidenceKind kind,
