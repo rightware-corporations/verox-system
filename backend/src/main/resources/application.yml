@@ -36,6 +36,12 @@ verox:
     enabled: ${VEROX_BOOTSTRAP_ENABLED:false}
     merchant-name: ${VEROX_BOOTSTRAP_MERCHANT_NAME:VEROX MVP Merchant}
     environment: ${VEROX_BOOTSTRAP_ENVIRONMENT:TEST}
+  bridge:
+    bootstrap:
+      enabled: ${VEROX_BRIDGE_BOOTSTRAP_ENABLED:false}
+      merchant-name: ${VEROX_BRIDGE_BOOTSTRAP_MERCHANT_NAME:VEROX MVP Merchant}
+      name: ${VEROX_BRIDGE_BOOTSTRAP_NAME:M-Pesa Receiving Bridge}
+      provider: ${VEROX_BRIDGE_BOOTSTRAP_PROVIDER:MPESA}
   checkout:
     base-url: ${VEROX_CHECKOUT_BASE_URL:http://localhost:3000}
     session-ttl-minutes: ${VEROX_CHECKOUT_TTL_MINUTES:15}
