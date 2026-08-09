@@ -70,6 +70,42 @@ public class EvidenceService {
     }
 
     @Transactional
+    public Evidence registerCustomerRaw(
+        Payment payment,
+        EvidenceKind kind,
+        EvidenceIngestSource ingestSource,
+        String provider,
+        String rawContent,
+        Instant occurredAt,
+        Instant receivedAt
+    ) {
+        Objects.requireNonNull(payment, "payment");
+        String contentSha256 = contentHasher.sha256(rawContent);
+
+        return evidenceRepository.findByPaymentIdAndOriginAndKindAndContentSha256(
+            payment.getId(),
+            EvidenceOrigin.CUSTOMER,
+            kind,
+            contentSha256
+        ).orElseGet(() -> evidenceRepository.save(new Evidence(
+            resourceIdGenerator.generate("ev"),
+            payment.getMerchant(),
+            payment,
+            EvidenceOrigin.CUSTOMER,
+            kind,
+            ingestSource,
+            provider,
+            contentSha256,
+            "text/plain",
+            null,
+            null,
+            rawContent,
+            occurredAt,
+            receivedAt
+        )));
+    }
+
+    @Transactional
     public Evidence registerCustomerStored(
         Payment payment,
         EvidenceKind kind,
