@@ -19,8 +19,22 @@ public interface EvidenceRepository extends JpaRepository<Evidence, UUID> {
     List<Evidence> findAllByPaymentIdOrderByReceivedAtAsc(UUID paymentId);
 
     @EntityGraph(attributePaths = {"merchant", "payment"})
+    List<Evidence> findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
+        UUID merchantId,
+        EvidenceOrigin origin
+    );
+
+    @EntityGraph(attributePaths = {"merchant", "payment"})
     Optional<Evidence> findByPaymentIdAndOriginAndKindAndContentSha256(
         UUID paymentId,
+        EvidenceOrigin origin,
+        EvidenceKind kind,
+        String contentSha256
+    );
+
+    @EntityGraph(attributePaths = {"merchant", "payment"})
+    Optional<Evidence> findByMerchantIdAndOriginAndKindAndContentSha256(
+        UUID merchantId,
         EvidenceOrigin origin,
         EvidenceKind kind,
         String contentSha256
