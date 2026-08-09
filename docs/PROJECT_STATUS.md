@@ -8,7 +8,7 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **PHASE 1 — Core Platform**
 
-Status: **IMPLEMENTED — RUNTIME/CI VALIDATION PENDING**
+Status: **IMPLEMENTED — LOCAL DATABASE/RUNTIME VALIDATION PENDING**
 
 ## Completed in implementation
 
@@ -36,17 +36,27 @@ Status: **IMPLEMENTED — RUNTIME/CI VALIDATION PENDING**
 - Hosted checkout URL generation
 - API error envelope
 - Core authentication and checkout unit tests
+- Maven Wrapper added for Windows/local development
+
+## Validated locally
+
+- Java runtime available
+- Maven Wrapper 3.9.16 works
+- backend compiles successfully with `release 21`
+- 6 unit tests pass
+- 0 test failures
+- 0 test errors
+- Maven build result: `BUILD SUCCESS`
 
 ## Current validation gate
 
-`VX-CORE-VALIDATE — Core Platform runtime validation`
+`VX-CORE-VALIDATE — Core Platform local database/runtime validation`
 
 Definition of Done:
 
-- PostgreSQL starts successfully
+- PostgreSQL is installed and starts successfully
+- local `verox` database and credentials are configured
 - Flyway V1 and V2 migrations apply successfully
-- backend compiles on Java 21
-- unit tests pass
 - backend starts with PostgreSQL
 - `/actuator/health` returns `UP`
 - bootstrap creates one merchant and one API key
@@ -67,10 +77,6 @@ First tasks after the validation gate:
 3. render payment summary and M-Pesa instructions
 4. implement customer evidence upload
 5. implement verifying/success/failure checkout states
-
-## Validation note
-
-The repository CI workflow is configured for backend changes, but this environment cannot read push-triggered GitHub Actions runs through the available connector. Local network access to GitHub/Maven is also unavailable here, so runtime/CI verification remains an explicit project gate rather than being assumed complete.
 
 ## Scope rule
 
