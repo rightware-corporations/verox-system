@@ -8,15 +8,15 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **PHASE 3 — VEROX Verification Engine**
 
-Status: **IN PROGRESS — M-PESA CUSTOMER/PROVIDER MESSAGE PARSER IMPLEMENTED, LOCAL VALIDATION PENDING**
+Status: **IN PROGRESS — M-PESA PARSER VALIDATED; CONSERVATIVE MATCHER IMPLEMENTED, LOCAL VALIDATION PENDING**
 
 Current task:
 
-`VX-VERIFY-01-VALIDATE — Validate conservative M-Pesa CUSTOMER and PROVIDER message parsing locally`
+`VX-VERIFY-02-VALIDATE — Validate deterministic CUSTOMER ↔ PROVIDER matching rules locally`
 
 Next task after validation:
 
-`VX-VERIFY-02 — Implement deterministic CUSTOMER ↔ PROVIDER matching and verification orchestration`
+`VX-VERIFY-03 — Implement verification orchestration, provider-evidence linking and controlled Payment transitions`
 
 ## Delivery strategy
 
@@ -113,9 +113,9 @@ Implemented and runtime validated:
 
 ## Phase 3 — VEROX Verification Engine
 
-### VX-VERIFY-01 — M-PESA MESSAGE PARSER IMPLEMENTED / LOCAL VALIDATION PENDING
+### VX-VERIFY-01 — M-PESA MESSAGE PARSER DONE / LOCAL VALIDATED
 
-Implemented:
+Implemented and validated:
 
 - normalized `ParsedMpesaMessage` model
 - parser keeps CUSTOMER and PROVIDER message rules separate
@@ -127,27 +127,44 @@ Implemented:
 - unknown/unrecognized text does not become match-ready
 - current parser intentionally supports only validated MVP patterns; broader provider-format support requires real samples
 - parser never changes Payment status and never confirms a payment
-- unit tests cover CUSTOMER parsing, PROVIDER parsing, cross-source normalization, unknown text and source-shape separation
+- full local suite passed with 22 tests, 0 failures and 0 errors after parser implementation
+
+### VX-VERIFY-02 — CONSERVATIVE MATCHER IMPLEMENTED / LOCAL VALIDATION PENDING
+
+Implemented:
+
+- pure `MpesaEvidenceMatcher` separated from Payment mutation/orchestration
+- requires CUSTOMER origin on customer input and PROVIDER origin on provider input
+- both parsed messages must be match-ready
+- exact transaction-reference equality required
+- exact CUSTOMER ↔ PROVIDER amount equality required
+- exact CUSTOMER ↔ PROVIDER currency equality required
+- provider amount must also equal the expected Payment amount
+- provider currency must also equal the expected Payment currency
+- any malformed, conflicting or mismatched input returns `REVIEW_REQUIRED`
+- matcher produces `MATCH` only when reference, amount and currency are all deterministic
+- matcher does not link Evidence, mutate Payment or emit webhooks
+- unit tests cover successful match, reference mismatch, evidence amount mismatch, expected Payment amount mismatch, unrecognized input, origin mismatch and expected-currency mismatch
 
 Validation gate:
 
 1. pull latest `main`
 2. run full local test suite
-3. confirm parser tests pass with zero failures/errors
+3. confirm matcher tests pass with zero failures/errors
 
-### VX-VERIFY-02 — NEXT
+### VX-VERIFY-03 — NEXT
 
 Planned:
 
 1. read CUSTOMER Evidence linked to a Payment
 2. parse CUSTOMER message
-3. scan unlinked PROVIDER evidence for the same Merchant/provider
-4. parse PROVIDER messages
-5. require exact transaction-reference match for the MVP when reference is available on both sides
-6. require exact amount/currency match
-7. reject ambiguous or multiple candidates as `REVIEW_REQUIRED`
-8. link exactly one provider Evidence to Payment only after safe match
-9. add controlled Payment transitions `PENDING → VERIFYING → CONFIRMED/REVIEW_REQUIRED/FAILED`
+3. scan unlinked PROVIDER Evidence for the same Merchant/provider
+4. parse PROVIDER candidates
+5. invoke conservative matcher against the expected Payment amount/currency
+6. reject zero/multiple safe candidates as pending or `REVIEW_REQUIRED`
+7. link exactly one provider Evidence to Payment only after a deterministic match
+8. controlled Payment transitions `PENDING → VERIFYING → CONFIRMED/REVIEW_REQUIRED`
+9. persist provider transaction reference on Payment only after deterministic match
 10. prevent one provider transaction/evidence from confirming multiple Payments
 
 ### Verification safety rule — LOCKED
