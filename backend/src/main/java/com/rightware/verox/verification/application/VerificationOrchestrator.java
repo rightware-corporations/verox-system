@@ -6,6 +6,7 @@ import com.rightware.verox.evidence.domain.EvidenceIngestSource;
 import com.rightware.verox.evidence.domain.EvidenceKind;
 import com.rightware.verox.evidence.domain.EvidenceOrigin;
 import com.rightware.verox.evidence.repository.EvidenceRepository;
+import com.rightware.verox.payment.application.PaymentConfirmedEvent;
 import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.domain.PaymentStatus;
 import com.rightware.verox.payment.repository.PaymentRepository;
@@ -13,10 +14,12 @@ import com.rightware.verox.verification.matching.MpesaEvidenceMatcher;
 import com.rightware.verox.verification.matching.VerificationMatchResult;
 import com.rightware.verox.verification.mpesa.MpesaMessageParser;
 import com.rightware.verox.verification.mpesa.ParsedMpesaMessage;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -40,19 +43,22 @@ public class VerificationOrchestrator {
     private final EvidenceService evidenceService;
     private final MpesaMessageParser messageParser;
     private final MpesaEvidenceMatcher evidenceMatcher;
+    private final ApplicationEventPublisher eventPublisher;
 
     public VerificationOrchestrator(
         PaymentRepository paymentRepository,
         EvidenceRepository evidenceRepository,
         EvidenceService evidenceService,
         MpesaMessageParser messageParser,
-        MpesaEvidenceMatcher evidenceMatcher
+        MpesaEvidenceMatcher evidenceMatcher,
+        ApplicationEventPublisher eventPublisher
     ) {
         this.paymentRepository = paymentRepository;
         this.evidenceRepository = evidenceRepository;
         this.evidenceService = evidenceService;
         this.messageParser = messageParser;
         this.evidenceMatcher = evidenceMatcher;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -189,6 +195,18 @@ public class VerificationOrchestrator {
         payment.confirm(MVP_PROVIDER, transactionReference, confirmedAt);
         payment.getCheckoutSession().complete(confirmedAt);
         paymentRepository.save(payment);
+
+        eventPublisher.publishEvent(new PaymentConfirmedEvent(
+            payment.getMerchant().getId(),
+            payment.getPublicId(),
+            payment.getCheckoutSession().getPublicId(),
+            payment.getCheckoutSession().getExternalReference(),
+            BigDecimal.valueOf(payment.getAmountMinor(), 2).toPlainString(),
+            payment.getCurrency(),
+            payment.getProvider(),
+            payment.getProviderTransactionReference(),
+            payment.getConfirmedAt()
+        ));
 
         return result(
             payment,
