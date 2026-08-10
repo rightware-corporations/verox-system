@@ -8,15 +8,15 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **PHASE 3 — VEROX Verification Engine**
 
-Status: **IN PROGRESS — PARSER + MATCHER + ORCHESTRATOR VALIDATED; AUTOMATIC AFTER-COMMIT VERIFICATION TRIGGER IMPLEMENTED, LOCAL VALIDATION PENDING**
+Status: **IN PROGRESS — AUTOMATIC CUSTOMER ↔ PROVIDER VERIFICATION RUNTIME VALIDATED; CHECKOUT COMPLETION IMPLEMENTED, LOCAL VALIDATION PENDING**
 
 Current task:
 
-`VX-VERIFY-04-VALIDATE — Validate automatic verification triggers after committed CUSTOMER/PROVIDER Evidence and run runtime end-to-end confirmation`
+`VX-VERIFY-05-VALIDATE — Validate Checkout Session OPEN → COMPLETED when its Payment becomes CONFIRMED`
 
 Next task after validation:
 
-`VX-VERIFY-05 — Complete Checkout Session on confirmed Payment and close Verification Engine runtime acceptance`
+`PHASE 4 / VX-WEBHOOK-01 — Implement merchant webhook configuration, payment.confirmed event persistence and HMAC signing`
 
 ## Delivery strategy
 
@@ -160,42 +160,41 @@ Implemented and validated:
 - Flyway V5 adds a database unique index on `(merchant_id, provider, provider_transaction_reference)` as a final replay/concurrency safety barrier
 - full local suite passed with 35 tests, 0 failures and 0 errors after orchestrator implementation
 
-### VX-VERIFY-04 — AUTOMATIC AFTER-COMMIT TRIGGER IMPLEMENTED / LOCAL VALIDATION PENDING
+### VX-VERIFY-04 — DONE / RUNTIME E2E VALIDATED
+
+Implemented and validated:
+
+- Evidence Infrastructure publishes neutral `EvidenceIngestedEvent` after CUSTOMER/PROVIDER ingestion
+- Verification Engine owns the `AFTER_COMMIT` listener; VEROX Bridge remains independent from matcher internals
+- post-commit verification runs in a new transaction (`REQUIRES_NEW`)
+- CUSTOMER evidence automatically moved the Payment from `PENDING` to `VERIFYING`
+- matching PROVIDER evidence through VEROX Bridge automatically moved the same Payment to `CONFIRMED`
+- runtime Payment persisted `provider = MPESA`, unique `provider_transaction_reference` and `confirmed_at`
+- CUSTOMER and PROVIDER Evidence were both linked to the same Payment
+- PROVIDER Evidence persisted `linked_at`
+- Flyway V5 was applied successfully
+- full local suite passed with 38 tests, 0 failures and 0 errors before runtime E2E
+
+### VX-VERIFY-05 — CHECKOUT COMPLETION IMPLEMENTED / LOCAL VALIDATION PENDING
 
 Implemented:
 
-- Evidence Infrastructure owns a neutral `EvidenceIngestedEvent`
-- Customer Message ingestion publishes the event with its linked `paymentId`
-- VEROX Bridge ingestion publishes the event with Merchant scope while provider Evidence is still unlinked
-- Verification Engine owns `VerificationEvidenceIngestedListener`; Bridge does not depend on matcher/orchestrator internals
-- listener runs in `AFTER_COMMIT`, so verification only sees committed Evidence
-- CUSTOMER event triggers verification only for its Payment
-- PROVIDER event triggers active-Payment verification for the Merchant, allowing provider-first arrival
-- verification exceptions after commit are logged and do not roll back or lose immutable Evidence
-- duplicate/replayed Evidence may retrigger verification safely without creating duplicate Evidence
-- unit tests cover event publication, CUSTOMER routing, PROVIDER routing and post-commit verification failure isolation
+- Checkout Session domain transition `OPEN → COMPLETED`
+- `completed_at` uses the Payment confirmation timestamp
+- repeated completion is idempotent and does not overwrite the first completion timestamp
+- non-OPEN/non-COMPLETED Checkout states cannot be completed
+- deterministic Payment confirmation completes its owning Checkout Session in the same verification transaction
+- no new migration required because `checkout_sessions.completed_at` and `COMPLETED` already exist
+- unit tests cover completion and idempotency
 
 Validation gate:
 
 1. pull latest `main`
 2. run full local test suite
-3. start backend and apply Flyway V5 successfully
-4. create a fresh 1.00 MZN Checkout Session
-5. submit CUSTOMER message with one unique transaction reference
-6. confirm Payment waits for provider (`VERIFYING`)
-7. submit matching PROVIDER message through VEROX Bridge
-8. confirm Payment becomes `CONFIRMED`
-9. confirm provider `ev_*` is linked to the correct `pay_*`
-10. confirm `provider_transaction_reference` is persisted
-11. repeat with PROVIDER arriving before CUSTOMER
-
-### VX-VERIFY-05 — NEXT
-
-Planned:
-
-- transition the owning Checkout Session from `OPEN` to `COMPLETED` when Payment becomes `CONFIRMED`
-- preserve redirect URLs as UX only; Payment/Webhook remains source of truth
-- close Verification Engine runtime acceptance before Webhook Delivery implementation
+3. run a fresh runtime E2E pair
+4. confirm Payment becomes `CONFIRMED`
+5. confirm owning Checkout Session becomes `COMPLETED`
+6. confirm `completed_at` is populated
 
 ### Verification safety rule — LOCKED
 
@@ -256,12 +255,13 @@ The backend is not complete until:
 6. VEROX safely matches the correct evidence pair
 7. ambiguity never becomes a guessed confirmation
 8. matched evidence transitions Payment to `CONFIRMED`
-9. duplicate/replayed evidence cannot confirm multiple Payments
-10. VEROX emits HMAC-signed merchant webhook events
-11. failed webhook delivery retries safely
-12. flow runs on Railway with PostgreSQL
-13. OCR alone can never confirm a payment
-14. no manual database intervention is required
+9. owning Checkout Session transitions to `COMPLETED`
+10. duplicate/replayed evidence cannot confirm multiple Payments
+11. VEROX emits HMAC-signed merchant webhook events
+12. failed webhook delivery retries safely
+13. flow runs on Railway with PostgreSQL
+14. OCR alone can never confirm a payment
+15. no manual database intervention is required
 
 ## Scope rule
 
