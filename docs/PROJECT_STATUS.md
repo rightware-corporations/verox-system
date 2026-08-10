@@ -8,11 +8,11 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **BACKEND ACCEPTANCE CLOSEOUT**
 
-Status: **IN PROGRESS — PHASE 4 LOCAL RUNTIME VALIDATED; REVERSE ARRIVAL-ORDER + EVIDENCE/CREDENTIAL CLOSEOUT REMAINS**
+Status: **IN PROGRESS — PROVIDER-FIRST PAYMENT/CHECKOUT RUNTIME VALIDATED; PROVIDER-FIRST WEBHOOK AUDIT + EVIDENCE/CREDENTIAL CLOSEOUT REMAIN**
 
 Current task:
 
-`BACKEND-ACCEPTANCE-01 — Runtime E2E with PROVIDER Evidence arriving before CUSTOMER Evidence; confirm Payment, Checkout and webhook reach the same deterministic final state`
+`BACKEND-ACCEPTANCE-01-WEBHOOK-AUDIT — Confirm the Provider-first Payment produced one payment.confirmed event and successful webhook delivery`
 
 Next task after validation:
 
@@ -113,7 +113,7 @@ Implemented and runtime validated:
 
 ## Phase 3 — VEROX Verification Engine
 
-Status: **IMPLEMENTATION DONE — CUSTOMER-FIRST LOCAL RUNTIME E2E VALIDATED; REVERSE ARRIVAL-ORDER ACCEPTANCE REMAINS BEFORE BACKEND DOD**
+Status: **DONE — BOTH CUSTOMER-FIRST AND PROVIDER-FIRST LOCAL RUNTIME PAYMENT/CHECKOUT FLOWS VALIDATED**
 
 Implemented and validated:
 
@@ -132,12 +132,9 @@ Implemented and validated:
 - `provider`, `provider_transaction_reference` and `confirmed_at` persist on Payment
 - owning Checkout Session transitions `OPEN → COMPLETED`
 - Checkout `completed_at` is populated from confirmation time
-- runtime E2E returned `Payment.status = CONFIRMED`, `Payment.provider = MPESA`, `Checkout.status = COMPLETED`, `Checkout.payment_status = CONFIRMED`
+- customer-first runtime E2E returned `Payment.status = CONFIRMED`, `Payment.provider = MPESA`, `Checkout.status = COMPLETED`, `Checkout.payment_status = CONFIRMED`
+- provider-first runtime E2E persisted PROVIDER Evidence while Payment remained safely `PENDING`, then CUSTOMER Evidence caused deterministic `Payment.status = CONFIRMED`, `Payment.provider = MPESA`, `Checkout.status = COMPLETED`, `Checkout.payment_status = CONFIRMED`
 - full local suite passed with 40 tests, 0 failures and 0 errors before Phase 4
-
-Acceptance closeout still required before backend Definition of Done:
-
-- run runtime E2E with PROVIDER Evidence arriving before CUSTOMER Evidence and confirm the same deterministic result
 
 ### Verification safety rule — LOCKED
 
@@ -201,16 +198,22 @@ Implemented and validated:
 
 ## Backend Acceptance Closeout
 
-### BACKEND-ACCEPTANCE-01 — CURRENT
+### BACKEND-ACCEPTANCE-01 — PROVIDER-FIRST PAYMENT/CHECKOUT VALIDATED; WEBHOOK AUDIT PENDING
 
-- run a fresh Checkout/Payment
-- ingest PROVIDER Evidence first through VEROX Bridge
-- confirm Payment remains safely waiting for CUSTOMER Evidence
-- ingest CUSTOMER Evidence second through Hosted Checkout endpoint
-- confirm the same Provider Evidence is linked deterministically
-- confirm Payment becomes `CONFIRMED`
-- confirm Checkout Session becomes `COMPLETED`
-- confirm `payment.confirmed` webhook is delivered successfully
+Validated:
+
+- fresh Checkout/Payment created for Provider-first flow
+- PROVIDER Evidence ingested first through VEROX Bridge
+- Provider Evidence persisted as `PROVIDER / SMS / MPESA`
+- Payment remained safely `PENDING`, with no provider and no `confirmed_at`, while CUSTOMER Evidence was absent
+- CUSTOMER Evidence ingested second through Hosted Checkout endpoint
+- Verification Engine found the already persisted Provider Evidence deterministically
+- Payment became `CONFIRMED` with provider `MPESA`
+- Checkout Session became `COMPLETED` with `payment_status = CONFIRMED`
+
+Remaining acceptance check:
+
+- confirm this same Provider-first Payment produced exactly one `payment.confirmed` event and a successful webhook delivery
 
 ### BACKEND-ACCEPTANCE-02 — NEXT
 
