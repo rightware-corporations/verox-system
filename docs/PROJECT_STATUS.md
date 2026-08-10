@@ -8,15 +8,15 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **BACKEND ACCEPTANCE CLOSEOUT**
 
-Status: **IN PROGRESS — PROVIDER-FIRST PAYMENT/CHECKOUT RUNTIME VALIDATED; PROVIDER-FIRST WEBHOOK AUDIT + EVIDENCE/CREDENTIAL CLOSEOUT REMAIN**
+Status: **IN PROGRESS — BACKEND-ACCEPTANCE-01 DONE; CUSTOMER EVIDENCE REPLAY + CREDENTIAL ISOLATION REMAIN**
 
 Current task:
 
-`BACKEND-ACCEPTANCE-01-WEBHOOK-AUDIT — Confirm the Provider-first Payment produced one payment.confirmed event and successful webhook delivery`
+`BACKEND-ACCEPTANCE-02 — Close duplicate Customer Evidence replay and opposite-direction merchant-key / bridge-key endpoint isolation checks`
 
 Next task after validation:
 
-`BACKEND-ACCEPTANCE-02 — Close duplicate Customer Evidence replay and opposite-direction credential isolation checks, then PHASE 5 hardening/Railway`
+`BACKEND DEFINITION-OF-DONE AUDIT — Final local backend audit, then PHASE 5 hardening/Railway`
 
 ## Delivery strategy
 
@@ -198,7 +198,7 @@ Implemented and validated:
 
 ## Backend Acceptance Closeout
 
-### BACKEND-ACCEPTANCE-01 — PROVIDER-FIRST PAYMENT/CHECKOUT VALIDATED; WEBHOOK AUDIT PENDING
+### BACKEND-ACCEPTANCE-01 — DONE / PROVIDER-FIRST FULL FLOW VALIDATED
 
 Validated:
 
@@ -210,12 +210,12 @@ Validated:
 - Verification Engine found the already persisted Provider Evidence deterministically
 - Payment became `CONFIRMED` with provider `MPESA`
 - Checkout Session became `COMPLETED` with `payment_status = CONFIRMED`
+- the same Provider-first Payment produced exactly one `payment.confirmed` webhook event
+- webhook delivery for the Provider-first Payment persisted as `SUCCEEDED`
+- runtime audit confirmed `attempt_count = 1`, `last_status_code = 200`, empty `last_error` and populated `delivered_at`
+- event-count audit returned exactly `1` for the Provider-first Payment
 
-Remaining acceptance check:
-
-- confirm this same Provider-first Payment produced exactly one `payment.confirmed` event and a successful webhook delivery
-
-### BACKEND-ACCEPTANCE-02 — NEXT
+### BACKEND-ACCEPTANCE-02 — CURRENT
 
 - duplicate identical Customer Evidence replay/database-count validation
 - opposite-direction merchant-key / bridge-key endpoint isolation check
