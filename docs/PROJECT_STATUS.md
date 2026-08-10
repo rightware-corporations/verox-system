@@ -6,17 +6,17 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 ## Current phase
 
-**PHASE 3 — VEROX Verification Engine**
+**PHASE 4 — VEROX Webhook Delivery**
 
-Status: **IN PROGRESS — AUTOMATIC CUSTOMER ↔ PROVIDER VERIFICATION RUNTIME VALIDATED; CHECKOUT COMPLETION IMPLEMENTED, LOCAL VALIDATION PENDING**
+Status: **IN PROGRESS — WEBHOOK OUTBOX + HMAC FOUNDATION IMPLEMENTED, LOCAL VALIDATION PENDING**
 
 Current task:
 
-`VX-VERIFY-05-VALIDATE — Validate Checkout Session OPEN → COMPLETED when its Payment becomes CONFIRMED`
+`VX-WEBHOOK-01-VALIDATE — Validate V6 webhook schema, merchant endpoint configuration, HMAC signing and payment.confirmed outbox persistence`
 
 Next task after validation:
 
-`PHASE 4 / VX-WEBHOOK-01 — Implement merchant webhook configuration, payment.confirmed event persistence and HMAC signing`
+`VX-WEBHOOK-02 — Implement HTTP delivery attempts, signature headers, retry/backoff and delivery idempotency`
 
 ## Delivery strategy
 
@@ -113,88 +113,27 @@ Implemented and runtime validated:
 
 ## Phase 3 — VEROX Verification Engine
 
-### VX-VERIFY-01 — M-PESA MESSAGE PARSER DONE / LOCAL VALIDATED
+Status: **DONE — LOCAL RUNTIME E2E VALIDATED**
 
 Implemented and validated:
 
-- normalized `ParsedMpesaMessage` model
-- parser keeps CUSTOMER and PROVIDER message rules separate
-- CUSTOMER sample format: `Confirmado <reference>. Transferiste <amount>MT ...`
-- PROVIDER sample format: `<reference> Confirmed.You have received <amount>MT ...`
-- transaction reference normalized to uppercase
-- amount normalized to MZN minor units
-- parser only marks a message match-ready when recognized reference + amount are present
-- unknown/unrecognized text does not become match-ready
-- current parser intentionally supports only validated MVP patterns; broader provider-format support requires real samples
-- parser never changes Payment status and never confirms a payment
-- full local suite passed with 22 tests, 0 failures and 0 errors after parser implementation
-
-### VX-VERIFY-02 — CONSERVATIVE MATCHER DONE / LOCAL VALIDATED
-
-Implemented and validated:
-
-- pure `MpesaEvidenceMatcher` separated from Payment mutation/orchestration
-- exact CUSTOMER ↔ PROVIDER transaction-reference match required
-- exact CUSTOMER ↔ PROVIDER amount/currency match required
-- provider amount/currency must also match expected Payment amount/currency
-- malformed, conflicting or mismatched input returns `REVIEW_REQUIRED`
-- matcher does not link Evidence, mutate Payment or emit webhooks
-- full local suite passed with 29 tests, 0 failures and 0 errors after matcher implementation
-
-### VX-VERIFY-03 — VERIFICATION ORCHESTRATOR DONE / LOCAL VALIDATED
-
-Implemented and validated:
-
-- internal `VerificationOrchestrator` separated from Evidence ingestion endpoints
-- reads CUSTOMER Evidence already linked to a Payment
-- rejects conflicting distinct customer-message claims as `REVIEW_REQUIRED`
-- validates customer amount/currency against expected Payment before provider matching
-- scans only unlinked `PROVIDER/SMS/VEROX_BRIDGE/MPESA` Evidence for the Merchant
-- unrelated provider SMS with another transaction reference is ignored; Payment keeps waiting
-- same-reference provider candidate is passed through the conservative matcher
-- multiple provider candidates with the same reference become `REVIEW_REQUIRED`
-- exactly one deterministic match links the provider Evidence to the Payment
-- controlled Payment transitions: `PENDING → VERIFYING → CONFIRMED` or `REVIEW_REQUIRED`
-- provider + provider transaction reference are persisted only after deterministic match
-- application-level provider-reference reuse check prevents known reuse across Payments
-- Flyway V5 adds a database unique index on `(merchant_id, provider, provider_transaction_reference)` as a final replay/concurrency safety barrier
-- full local suite passed with 35 tests, 0 failures and 0 errors after orchestrator implementation
-
-### VX-VERIFY-04 — DONE / RUNTIME E2E VALIDATED
-
-Implemented and validated:
-
-- Evidence Infrastructure publishes neutral `EvidenceIngestedEvent` after CUSTOMER/PROVIDER ingestion
-- Verification Engine owns the `AFTER_COMMIT` listener; VEROX Bridge remains independent from matcher internals
-- post-commit verification runs in a new transaction (`REQUIRES_NEW`)
-- CUSTOMER evidence automatically moved the Payment from `PENDING` to `VERIFYING`
-- matching PROVIDER evidence through VEROX Bridge automatically moved the same Payment to `CONFIRMED`
-- runtime Payment persisted `provider = MPESA`, unique `provider_transaction_reference` and `confirmed_at`
-- CUSTOMER and PROVIDER Evidence were both linked to the same Payment
-- PROVIDER Evidence persisted `linked_at`
-- Flyway V5 was applied successfully
-- full local suite passed with 38 tests, 0 failures and 0 errors before runtime E2E
-
-### VX-VERIFY-05 — CHECKOUT COMPLETION IMPLEMENTED / LOCAL VALIDATION PENDING
-
-Implemented:
-
-- Checkout Session domain transition `OPEN → COMPLETED`
-- `completed_at` uses the Payment confirmation timestamp
-- repeated completion is idempotent and does not overwrite the first completion timestamp
-- non-OPEN/non-COMPLETED Checkout states cannot be completed
-- deterministic Payment confirmation completes its owning Checkout Session in the same verification transaction
-- no new migration required because `checkout_sessions.completed_at` and `COMPLETED` already exist
-- unit tests cover completion and idempotency
-
-Validation gate:
-
-1. pull latest `main`
-2. run full local test suite
-3. run a fresh runtime E2E pair
-4. confirm Payment becomes `CONFIRMED`
-5. confirm owning Checkout Session becomes `COMPLETED`
-6. confirm `completed_at` is populated
+- M-Pesa CUSTOMER / PROVIDER parser
+- normalized transaction reference and MZN minor-unit amount
+- conservative deterministic matcher
+- Payment expected amount/currency validation
+- ambiguity and malformed inputs never guess confirmation
+- provider reference replay protection in application and PostgreSQL (Flyway V5)
+- Verification Orchestrator separated from Evidence ingestion
+- neutral Evidence ingestion events
+- `AFTER_COMMIT` verification with `REQUIRES_NEW`
+- CUSTOMER Evidence automatically moves Payment to `VERIFYING` while waiting for Provider Evidence
+- matching PROVIDER Evidence from VEROX Bridge automatically moves Payment to `CONFIRMED`
+- both CUSTOMER and PROVIDER Evidence link to the same Payment
+- `provider`, `provider_transaction_reference` and `confirmed_at` persist on Payment
+- owning Checkout Session transitions `OPEN → COMPLETED`
+- Checkout `completed_at` is populated from confirmation time
+- runtime E2E returned `Payment.status = CONFIRMED`, `Payment.provider = MPESA`, `Checkout.status = COMPLETED`, `Checkout.payment_status = CONFIRMED`
+- full local suite passed with 40 tests, 0 failures and 0 errors before Phase 4
 
 ### Verification safety rule — LOCKED
 
@@ -204,23 +143,61 @@ VEROX must never guess a payment match. Missing, malformed, conflicting or ambig
 
 OCR output is never sufficient by itself to confirm a payment.
 
-## Phase 4 — Webhooks / Merchant Return
+## Phase 4 — VEROX Webhook Delivery
+
+### VX-WEBHOOK-01 — OUTBOX + HMAC FOUNDATION IMPLEMENTED / LOCAL VALIDATION PENDING
+
+Implemented:
+
+- Flyway V6 creates `webhook_endpoints`, `webhook_events` and `webhook_deliveries`
+- one configured webhook endpoint per Merchant for the MVP
+- `PUT /v1/webhook-endpoint` merchant-authenticated configuration endpoint
+- endpoint IDs use non-enumerable `whep_*`
+- merchant signing secrets use `whsec_*`
+- `whsec_*` is deterministically derived from a server-side `VEROX_WEBHOOK_MASTER_SECRET` + endpoint identity instead of being stored in plaintext in PostgreSQL
+- HMAC-SHA256 signature format: `VEROX-Signature: t=<unix>,v1=<hex>` over `<timestamp>.<raw-payload>`
+- Verification Engine publishes neutral `PaymentConfirmedEvent` only after deterministic Payment confirmation
+- Webhook Delivery listens `AFTER_COMMIT`; webhook failures cannot roll back confirmed Payments
+- `payment.confirmed` webhook event payload is serialized once and persisted as immutable `payload_json`
+- webhook event IDs use `evt_*`
+- duplicate event protection exists per Merchant + event type + aggregate
+- active Merchant endpoint creates exactly one persistent delivery row per event
+- delivery IDs use `wd_*`
+- new delivery starts `PENDING` with attempt metadata ready for retry processing
+- signature and outbox unit tests added
+
+Validation gate:
+
+1. pull latest `main`
+2. run full local test suite
+3. start backend and confirm Flyway V6 applies successfully
+4. configure one local Merchant webhook endpoint
+5. verify returned `whep_*` and `whsec_*`
+6. run one new confirmed-payment E2E
+7. confirm one `payment.confirmed` row in `webhook_events`
+8. confirm one `PENDING` row in `webhook_deliveries`
+9. confirm Payment/Checkout remain confirmed/completed regardless of delivery state
+
+### VX-WEBHOOK-02 — NEXT
 
 Planned:
 
-- merchant webhook configuration
-- HMAC signing
-- `payment.confirmed` and related event contracts
-- persistent delivery attempts
-- retry/backoff
-- webhook idempotency
-- merchant integration validation
+- HTTP POST delivery worker
+- `Content-Type: application/json`
+- `VEROX-Signature` header generated from persisted raw payload
+- event/delivery identity headers
+- 2xx success handling
+- failure persistence
+- bounded exponential retry/backoff
+- safe delivery idempotency
+- local merchant receiver integration test
 
 ## Phase 5 — Backend Hardening / Railway Deployment
 
 Planned:
 
 - remove/default-disable Spring Security development credential behavior
+- require production webhook master secret with no development fallback
 - production secrets
 - rate limiting
 - audit/security logging
@@ -257,7 +234,7 @@ The backend is not complete until:
 8. matched evidence transitions Payment to `CONFIRMED`
 9. owning Checkout Session transitions to `COMPLETED`
 10. duplicate/replayed evidence cannot confirm multiple Payments
-11. VEROX emits HMAC-signed merchant webhook events
+11. VEROX persists and HMAC-signs merchant webhook events
 12. failed webhook delivery retries safely
 13. flow runs on Railway with PostgreSQL
 14. OCR alone can never confirm a payment
