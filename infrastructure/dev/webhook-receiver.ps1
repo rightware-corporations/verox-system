@@ -17,7 +17,7 @@ function Get-HexHmacSha256 {
 
     $keyBytes = [System.Text.Encoding]::UTF8.GetBytes($Secret)
     $valueBytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
-    $hmac = [System.Security.Cryptography.HMACSHA256]::new($keyBytes)
+    $hmac = New-Object System.Security.Cryptography.HMACSHA256(,$keyBytes)
     try {
         $hash = $hmac.ComputeHash($valueBytes)
         return ([System.BitConverter]::ToString($hash)).Replace("-", "").ToLowerInvariant()
@@ -27,23 +27,45 @@ function Get-HexHmacSha256 {
     }
 }
 
+function Convert-HexToBytes {
+    param([string]$Hex)
+
+    if ([string]::IsNullOrWhiteSpace($Hex) -or ($Hex.Length % 2) -ne 0) {
+        return $null
+    }
+
+    try {
+        [byte[]]$bytes = New-Object byte[] ($Hex.Length / 2)
+        for ($i = 0; $i -lt $bytes.Length; $i++) {
+            $bytes[$i] = [Convert]::ToByte($Hex.Substring($i * 2, 2), 16)
+        }
+        return $bytes
+    }
+    catch {
+        return $null
+    }
+}
+
 function Test-FixedTimeHexEqual {
     param(
         [string]$ExpectedHex,
         [string]$ActualHex
     )
 
-    try {
-        $expected = [Convert]::FromHexString($ExpectedHex)
-        $actual = [Convert]::FromHexString($ActualHex)
-        return [System.Security.Cryptography.CryptographicOperations]::FixedTimeEquals($expected, $actual)
-    }
-    catch {
+    [byte[]]$expected = Convert-HexToBytes $ExpectedHex
+    [byte[]]$actual = Convert-HexToBytes $ActualHex
+    if ($null -eq $expected -or $null -eq $actual -or $expected.Length -ne $actual.Length) {
         return $false
     }
+
+    $difference = 0
+    for ($i = 0; $i -lt $expected.Length; $i++) {
+        $difference = $difference -bor ($expected[$i] -bxor $actual[$i])
+    }
+    return $difference -eq 0
 }
 
-$listener = [System.Net.HttpListener]::new()
+$listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$Port/")
 $listener.Start()
 
@@ -56,7 +78,7 @@ try {
         $request = $context.Request
         $response = $context.Response
 
-        $reader = [System.IO.StreamReader]::new($request.InputStream, $request.ContentEncoding)
+        $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
         try {
             $body = $reader.ReadToEnd()
         }
@@ -74,7 +96,7 @@ try {
             $timestampPart = $null
             $signaturePart = $null
             foreach ($part in $signatureHeader.Split(',')) {
-                $pair = $part.Split('=', 2)
+                $pair = $part -split '=', 2
                 if ($pair.Length -ne 2) { continue }
                 if ($pair[0] -eq 't') { $timestampPart = $pair[1] }
                 if ($pair[0] -eq 'v1') { $signaturePart = $pair[1] }
