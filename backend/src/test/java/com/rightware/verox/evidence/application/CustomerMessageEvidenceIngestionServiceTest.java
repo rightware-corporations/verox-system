@@ -12,6 +12,8 @@ import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.repository.PaymentRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -28,10 +30,11 @@ import static org.mockito.Mockito.when;
 class CustomerMessageEvidenceIngestionServiceTest {
 
     @Test
-    void ingestsPastedCustomerMessageWithoutManualPaymentFields() {
+    void ingestsPastedCustomerMessageWithoutManualPaymentFieldsAndPublishesVerificationEvent() {
         CheckoutSessionRepository checkoutSessionRepository = mock(CheckoutSessionRepository.class);
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         EvidenceService evidenceService = mock(EvidenceService.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
 
         Merchant merchant = new Merchant("Event Merchant");
         CheckoutSession session = session(merchant, Instant.now().plusSeconds(600));
@@ -76,7 +79,8 @@ class CustomerMessageEvidenceIngestionServiceTest {
         CustomerMessageEvidenceIngestionService service = new CustomerMessageEvidenceIngestionService(
             checkoutSessionRepository,
             paymentRepository,
-            evidenceService
+            evidenceService,
+            eventPublisher
         );
 
         CustomerMessageEvidenceView result = service.ingest(
@@ -100,6 +104,14 @@ class CustomerMessageEvidenceIngestionServiceTest {
             eq(null),
             any(Instant.class)
         );
+
+        ArgumentCaptor<EvidenceIngestedEvent> eventCaptor = ArgumentCaptor.forClass(EvidenceIngestedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        EvidenceIngestedEvent event = eventCaptor.getValue();
+        assertThat(event.merchantId()).isEqualTo(merchant.getId());
+        assertThat(event.paymentId()).isEqualTo(payment.getId());
+        assertThat(event.origin()).isEqualTo(EvidenceOrigin.CUSTOMER);
+        assertThat(event.evidencePublicId()).isEqualTo("ev_customer123");
     }
 
     @Test
@@ -107,6 +119,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
         CheckoutSessionRepository checkoutSessionRepository = mock(CheckoutSessionRepository.class);
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         EvidenceService evidenceService = mock(EvidenceService.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
 
         Merchant merchant = new Merchant("Event Merchant");
         CheckoutSession session = session(merchant, Instant.now().minusSeconds(60));
@@ -115,7 +128,8 @@ class CustomerMessageEvidenceIngestionServiceTest {
         CustomerMessageEvidenceIngestionService service = new CustomerMessageEvidenceIngestionService(
             checkoutSessionRepository,
             paymentRepository,
-            evidenceService
+            evidenceService,
+            eventPublisher
         );
 
         assertThatThrownBy(() -> service.ingest("cs_test123", "M-Pesa message"))
@@ -124,6 +138,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
 
         verify(paymentRepository, never()).findByCheckoutSessionId(any());
         verify(evidenceService, never()).registerCustomerRaw(any(), any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     private CheckoutSession session(Merchant merchant, Instant expiresAt) {
