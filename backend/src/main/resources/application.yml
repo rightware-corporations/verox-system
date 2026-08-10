@@ -47,6 +47,13 @@ verox:
     session-ttl-minutes: ${VEROX_CHECKOUT_TTL_MINUTES:15}
   webhook:
     master-secret: ${VEROX_WEBHOOK_MASTER_SECRET:verox-dev-webhook-master-secret-change-me}
+    delivery:
+      poll-delay-ms: ${VEROX_WEBHOOK_POLL_DELAY_MS:2000}
+      connect-timeout-seconds: ${VEROX_WEBHOOK_CONNECT_TIMEOUT_SECONDS:5}
+      request-timeout-seconds: ${VEROX_WEBHOOK_REQUEST_TIMEOUT_SECONDS:10}
+      max-attempts: ${VEROX_WEBHOOK_MAX_ATTEMPTS:8}
+      base-retry-seconds: ${VEROX_WEBHOOK_BASE_RETRY_SECONDS:10}
+      max-retry-seconds: ${VEROX_WEBHOOK_MAX_RETRY_SECONDS:900}
 
 logging:
   level:
