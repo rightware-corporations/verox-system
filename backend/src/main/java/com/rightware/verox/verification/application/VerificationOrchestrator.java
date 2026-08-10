@@ -185,7 +185,9 @@ public class VerificationOrchestrator {
         }
 
         evidenceService.linkProviderEvidence(provider.evidence(), payment);
-        payment.confirm(MVP_PROVIDER, transactionReference, Instant.now());
+        Instant confirmedAt = Instant.now();
+        payment.confirm(MVP_PROVIDER, transactionReference, confirmedAt);
+        payment.getCheckoutSession().complete(confirmedAt);
         paymentRepository.save(payment);
 
         return result(
