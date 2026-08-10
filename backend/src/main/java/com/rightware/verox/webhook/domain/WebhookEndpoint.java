@@ -68,6 +68,11 @@ public class WebhookEndpoint {
         updatedAt = Instant.now();
     }
 
+    public void updateUrl(String url) {
+        this.url = url;
+        this.status = WebhookEndpointStatus.ACTIVE;
+    }
+
     public UUID getId() { return id; }
     public String getPublicId() { return publicId; }
     public Merchant getMerchant() { return merchant; }
