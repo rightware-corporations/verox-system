@@ -8,15 +8,15 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **PHASE 3 — VEROX Verification Engine**
 
-Status: **IN PROGRESS — M-PESA PARSER VALIDATED; CONSERVATIVE MATCHER IMPLEMENTED, LOCAL VALIDATION PENDING**
+Status: **IN PROGRESS — PARSER + CONSERVATIVE MATCHER VALIDATED; VERIFICATION ORCHESTRATOR IMPLEMENTED, LOCAL VALIDATION PENDING**
 
 Current task:
 
-`VX-VERIFY-02-VALIDATE — Validate deterministic CUSTOMER ↔ PROVIDER matching rules locally`
+`VX-VERIFY-03-VALIDATE — Validate verification orchestration, controlled Payment transitions and provider-reference reuse protection locally`
 
 Next task after validation:
 
-`VX-VERIFY-03 — Implement verification orchestration, provider-evidence linking and controlled Payment transitions`
+`VX-VERIFY-04 — Trigger verification automatically after committed CUSTOMER/PROVIDER Evidence ingestion and run runtime end-to-end confirmation`
 
 ## Delivery strategy
 
@@ -129,43 +129,57 @@ Implemented and validated:
 - parser never changes Payment status and never confirms a payment
 - full local suite passed with 22 tests, 0 failures and 0 errors after parser implementation
 
-### VX-VERIFY-02 — CONSERVATIVE MATCHER IMPLEMENTED / LOCAL VALIDATION PENDING
+### VX-VERIFY-02 — CONSERVATIVE MATCHER DONE / LOCAL VALIDATED
+
+Implemented and validated:
+
+- pure `MpesaEvidenceMatcher` separated from Payment mutation/orchestration
+- exact CUSTOMER ↔ PROVIDER transaction-reference match required
+- exact CUSTOMER ↔ PROVIDER amount/currency match required
+- provider amount/currency must also match expected Payment amount/currency
+- malformed, conflicting or mismatched input returns `REVIEW_REQUIRED`
+- matcher does not link Evidence, mutate Payment or emit webhooks
+- full local suite passed with 29 tests, 0 failures and 0 errors after matcher implementation
+
+### VX-VERIFY-03 — VERIFICATION ORCHESTRATOR IMPLEMENTED / LOCAL VALIDATION PENDING
 
 Implemented:
 
-- pure `MpesaEvidenceMatcher` separated from Payment mutation/orchestration
-- requires CUSTOMER origin on customer input and PROVIDER origin on provider input
-- both parsed messages must be match-ready
-- exact transaction-reference equality required
-- exact CUSTOMER ↔ PROVIDER amount equality required
-- exact CUSTOMER ↔ PROVIDER currency equality required
-- provider amount must also equal the expected Payment amount
-- provider currency must also equal the expected Payment currency
-- any malformed, conflicting or mismatched input returns `REVIEW_REQUIRED`
-- matcher produces `MATCH` only when reference, amount and currency are all deterministic
-- matcher does not link Evidence, mutate Payment or emit webhooks
-- unit tests cover successful match, reference mismatch, evidence amount mismatch, expected Payment amount mismatch, unrecognized input, origin mismatch and expected-currency mismatch
+- internal `VerificationOrchestrator` separated from Evidence ingestion endpoints
+- reads CUSTOMER Evidence already linked to a Payment
+- rejects conflicting distinct customer-message claims as `REVIEW_REQUIRED`
+- validates customer amount/currency against expected Payment before provider matching
+- scans only unlinked `PROVIDER/SMS/VEROX_BRIDGE/MPESA` Evidence for the Merchant
+- unrelated provider SMS with another transaction reference is ignored; Payment keeps waiting
+- same-reference provider candidate is passed through the conservative matcher
+- multiple provider candidates with the same reference become `REVIEW_REQUIRED`
+- exactly one deterministic match links the provider Evidence to the Payment
+- controlled Payment transitions: `PENDING → VERIFYING → CONFIRMED` or `REVIEW_REQUIRED`
+- provider + provider transaction reference are persisted only after deterministic match
+- application-level provider-reference reuse check prevents known reuse across Payments
+- Flyway V5 adds a database unique index on `(merchant_id, provider, provider_transaction_reference)` as a final replay/concurrency safety barrier
+- orchestrator unit tests cover deterministic confirmation, unrelated provider Evidence, amount conflict, provider ambiguity, transaction-reference reuse and conflicting customer evidence
+- orchestrator is not yet automatically triggered by ingestion; this is intentionally the next integration step after isolated validation
 
 Validation gate:
 
 1. pull latest `main`
 2. run full local test suite
-3. confirm matcher tests pass with zero failures/errors
+3. confirm orchestrator tests pass with zero failures/errors
+4. start backend and apply Flyway V5 successfully
 
-### VX-VERIFY-03 — NEXT
+### VX-VERIFY-04 — NEXT
 
 Planned:
 
-1. read CUSTOMER Evidence linked to a Payment
-2. parse CUSTOMER message
-3. scan unlinked PROVIDER Evidence for the same Merchant/provider
-4. parse PROVIDER candidates
-5. invoke conservative matcher against the expected Payment amount/currency
-6. reject zero/multiple safe candidates as pending or `REVIEW_REQUIRED`
-7. link exactly one provider Evidence to Payment only after a deterministic match
-8. controlled Payment transitions `PENDING → VERIFYING → CONFIRMED/REVIEW_REQUIRED`
-9. persist provider transaction reference on Payment only after deterministic match
-10. prevent one provider transaction/evidence from confirming multiple Payments
+1. trigger `verifyPayment(...)` after committed Customer Evidence ingestion
+2. trigger Merchant active-payment verification after committed Provider Evidence ingestion
+3. keep raw Evidence persistence independent from verification failures
+4. run a full runtime pair: Checkout → CUSTOMER message + Bridge PROVIDER message
+5. confirm provider `ev_*` becomes linked to the correct `pay_*`
+6. confirm Payment becomes `CONFIRMED`
+7. confirm provider transaction reference is persisted exactly once
+8. confirm reverse evidence arrival order also works
 
 ### Verification safety rule — LOCKED
 
