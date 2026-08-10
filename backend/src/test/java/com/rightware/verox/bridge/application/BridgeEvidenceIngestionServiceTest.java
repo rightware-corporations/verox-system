@@ -4,6 +4,7 @@ import com.rightware.verox.bridge.domain.Bridge;
 import com.rightware.verox.bridge.domain.BridgeStatus;
 import com.rightware.verox.bridge.repository.BridgeRepository;
 import com.rightware.verox.common.web.ApiException;
+import com.rightware.verox.evidence.application.EvidenceIngestedEvent;
 import com.rightware.verox.evidence.application.EvidenceService;
 import com.rightware.verox.evidence.domain.Evidence;
 import com.rightware.verox.evidence.domain.EvidenceIngestSource;
@@ -11,6 +12,8 @@ import com.rightware.verox.evidence.domain.EvidenceKind;
 import com.rightware.verox.evidence.domain.EvidenceOrigin;
 import com.rightware.verox.merchant.domain.Merchant;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -27,9 +30,10 @@ import static org.mockito.Mockito.when;
 class BridgeEvidenceIngestionServiceTest {
 
     @Test
-    void ingestsRawProviderSmsIntoEvidenceInfrastructure() {
+    void ingestsRawProviderSmsIntoEvidenceInfrastructureAndPublishesVerificationEvent() {
         BridgeRepository bridgeRepository = mock(BridgeRepository.class);
         EvidenceService evidenceService = mock(EvidenceService.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         Merchant merchant = new Merchant("Event Merchant");
         Bridge bridge = new Bridge("brg_test123", merchant, "Receiving iPhone", "MPESA");
         BridgePrincipal principal = new BridgePrincipal(
@@ -68,7 +72,11 @@ class BridgeEvidenceIngestionServiceTest {
             eq(receivedAt)
         )).thenReturn(evidence);
 
-        BridgeEvidenceIngestionService service = new BridgeEvidenceIngestionService(bridgeRepository, evidenceService);
+        BridgeEvidenceIngestionService service = new BridgeEvidenceIngestionService(
+            bridgeRepository,
+            evidenceService,
+            eventPublisher
+        );
         BridgeEvidenceView result = service.ingest(
             principal,
             "brg_test123",
@@ -90,12 +98,21 @@ class BridgeEvidenceIngestionServiceTest {
             null,
             receivedAt
         );
+
+        ArgumentCaptor<EvidenceIngestedEvent> eventCaptor = ArgumentCaptor.forClass(EvidenceIngestedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        EvidenceIngestedEvent event = eventCaptor.getValue();
+        assertThat(event.merchantId()).isEqualTo(merchant.getId());
+        assertThat(event.paymentId()).isNull();
+        assertThat(event.origin()).isEqualTo(EvidenceOrigin.PROVIDER);
+        assertThat(event.evidencePublicId()).isEqualTo("ev_test123");
     }
 
     @Test
     void rejectsBridgeCredentialUsedForDifferentBridgePath() {
         BridgeRepository bridgeRepository = mock(BridgeRepository.class);
         EvidenceService evidenceService = mock(EvidenceService.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         Merchant merchant = new Merchant("Event Merchant");
         Bridge bridge = new Bridge("brg_test123", merchant, "Receiving iPhone", "MPESA");
         BridgePrincipal principal = new BridgePrincipal(
@@ -105,7 +122,11 @@ class BridgeEvidenceIngestionServiceTest {
             bridge.getProvider()
         );
 
-        BridgeEvidenceIngestionService service = new BridgeEvidenceIngestionService(bridgeRepository, evidenceService);
+        BridgeEvidenceIngestionService service = new BridgeEvidenceIngestionService(
+            bridgeRepository,
+            evidenceService,
+            eventPublisher
+        );
 
         assertThatThrownBy(() -> service.ingest(
             principal,
@@ -118,5 +139,6 @@ class BridgeEvidenceIngestionServiceTest {
 
         verify(bridgeRepository, never()).findByIdAndStatus(any(), any());
         verify(evidenceService, never()).registerProviderRaw(any(), any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }
