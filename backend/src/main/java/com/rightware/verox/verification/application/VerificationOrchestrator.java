@@ -14,6 +14,7 @@ import com.rightware.verox.verification.matching.VerificationMatchResult;
 import com.rightware.verox.verification.mpesa.MpesaMessageParser;
 import com.rightware.verox.verification.mpesa.ParsedMpesaMessage;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -54,14 +55,14 @@ public class VerificationOrchestrator {
         this.evidenceMatcher = evidenceMatcher;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public VerificationRunResult verifyPayment(UUID paymentId) {
         Payment payment = paymentRepository.findById(paymentId)
             .orElseThrow(() -> new IllegalArgumentException("Payment was not found"));
         return verify(payment);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<VerificationRunResult> verifyMerchant(UUID merchantId) {
         List<VerificationRunResult> results = new ArrayList<>();
         List<Payment> payments = paymentRepository.findAllByMerchantIdAndStatusInOrderByCreatedAtAsc(
