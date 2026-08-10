@@ -65,19 +65,22 @@ public class WebhookDeliveryAttemptService {
         headers.put("VEROX-Delivery-Id", delivery.getPublicId());
         headers.put("VEROX-Signature", signature);
 
+        int statusCode;
         try {
-            int statusCode = httpTransport.postJson(delivery.getEndpoint().getUrl(), payload, headers);
-            if (statusCode >= 200 && statusCode < 300) {
-                delivery.recordSuccess(statusCode, attemptedAt);
-                deliveryRepository.save(delivery);
-                log.info("Webhook delivery {} succeeded with HTTP {}", delivery.getPublicId(), statusCode);
-                return;
-            }
-
-            recordFailure(delivery, statusCode, "HTTP_STATUS_" + statusCode, attemptedAt);
+            statusCode = httpTransport.postJson(delivery.getEndpoint().getUrl(), payload, headers);
         } catch (RuntimeException exception) {
             recordFailure(delivery, null, safeError(exception), attemptedAt);
+            return;
         }
+
+        if (statusCode >= 200 && statusCode < 300) {
+            delivery.recordSuccess(statusCode, attemptedAt);
+            deliveryRepository.save(delivery);
+            log.info("Webhook delivery {} succeeded with HTTP {}", delivery.getPublicId(), statusCode);
+            return;
+        }
+
+        recordFailure(delivery, statusCode, "HTTP_STATUS_" + statusCode, attemptedAt);
     }
 
     private void recordFailure(WebhookDelivery delivery, Integer statusCode, String error, Instant attemptedAt) {
