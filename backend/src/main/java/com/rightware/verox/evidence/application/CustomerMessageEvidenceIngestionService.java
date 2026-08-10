@@ -9,6 +9,7 @@ import com.rightware.verox.evidence.domain.EvidenceIngestSource;
 import com.rightware.verox.evidence.domain.EvidenceKind;
 import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.repository.PaymentRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,15 +24,18 @@ public class CustomerMessageEvidenceIngestionService {
     private final CheckoutSessionRepository checkoutSessionRepository;
     private final PaymentRepository paymentRepository;
     private final EvidenceService evidenceService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CustomerMessageEvidenceIngestionService(
         CheckoutSessionRepository checkoutSessionRepository,
         PaymentRepository paymentRepository,
-        EvidenceService evidenceService
+        EvidenceService evidenceService,
+        ApplicationEventPublisher eventPublisher
     ) {
         this.checkoutSessionRepository = checkoutSessionRepository;
         this.paymentRepository = paymentRepository;
         this.evidenceService = evidenceService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -75,6 +79,13 @@ public class CustomerMessageEvidenceIngestionService {
             null,
             receivedAt
         );
+
+        eventPublisher.publishEvent(new EvidenceIngestedEvent(
+            payment.getMerchant().getId(),
+            payment.getId(),
+            evidence.getOrigin(),
+            evidence.getPublicId()
+        ));
 
         return new CustomerMessageEvidenceView(
             evidence.getPublicId(),
