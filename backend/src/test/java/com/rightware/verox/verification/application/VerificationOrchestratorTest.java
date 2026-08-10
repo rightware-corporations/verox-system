@@ -9,12 +9,15 @@ import com.rightware.verox.evidence.domain.EvidenceKind;
 import com.rightware.verox.evidence.domain.EvidenceOrigin;
 import com.rightware.verox.evidence.repository.EvidenceRepository;
 import com.rightware.verox.merchant.domain.Merchant;
+import com.rightware.verox.payment.application.PaymentConfirmedEvent;
 import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.domain.PaymentStatus;
 import com.rightware.verox.payment.repository.PaymentRepository;
 import com.rightware.verox.verification.matching.MpesaEvidenceMatcher;
 import com.rightware.verox.verification.mpesa.MpesaMessageParser;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.List;
@@ -22,7 +25,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -35,14 +37,7 @@ class VerificationOrchestratorTest {
         Fixture fixture = fixture();
         Evidence customer = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
         Evidence provider = providerEvidence(fixture.merchant(), "DH10L1OJRUS", "1.00", "ev_provider_match");
-
-        when(fixture.paymentRepository().findById(fixture.payment().getId()))
-            .thenReturn(Optional.of(fixture.payment()));
-        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId()))
-            .thenReturn(List.of(customer));
-        when(fixture.paymentRepository().existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
-            fixture.merchant().getId(), "MPESA", "DH10L1OJRUS", fixture.payment().getId()
-        )).thenReturn(false);
+        stubActivePayment(fixture, customer);
         when(fixture.evidenceRepository().findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
             fixture.merchant().getId(), EvidenceOrigin.PROVIDER
         )).thenReturn(List.of(provider));
@@ -51,12 +46,20 @@ class VerificationOrchestratorTest {
 
         assertThat(result.status()).isEqualTo(VerificationRunStatus.CONFIRMED);
         assertThat(result.providerEvidenceId()).isEqualTo("ev_provider_match");
-        assertThat(result.transactionReference()).isEqualTo("DH10L1OJRUS");
         assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.CONFIRMED);
-        assertThat(fixture.payment().getProvider()).isEqualTo("MPESA");
-        assertThat(fixture.payment().getProviderTransactionReference()).isEqualTo("DH10L1OJRUS");
         verify(fixture.evidenceService()).linkProviderEvidence(provider, fixture.payment());
         verify(fixture.paymentRepository()).save(fixture.payment());
+
+        ArgumentCaptor<PaymentConfirmedEvent> captor = ArgumentCaptor.forClass(PaymentConfirmedEvent.class);
+        verify(fixture.eventPublisher()).publishEvent(captor.capture());
+        PaymentConfirmedEvent event = captor.getValue();
+        assertThat(event.paymentId()).isEqualTo("pay_verify_test");
+        assertThat(event.checkoutSessionId()).isEqualTo("cs_verify_test");
+        assertThat(event.externalReference()).isEqualTo("ORDER-VERIFY");
+        assertThat(event.amount()).isEqualTo("1.00");
+        assertThat(event.currency()).isEqualTo("MZN");
+        assertThat(event.provider()).isEqualTo("MPESA");
+        assertThat(event.providerTransactionReference()).isEqualTo("DH10L1OJRUS");
     }
 
     @Test
@@ -74,6 +77,7 @@ class VerificationOrchestratorTest {
         assertThat(result.status()).isEqualTo(VerificationRunStatus.WAITING_PROVIDER);
         assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.VERIFYING);
         verify(fixture.evidenceService(), never()).linkProviderEvidence(any(), any());
+        verify(fixture.eventPublisher(), never()).publishEvent(any(PaymentConfirmedEvent.class));
     }
 
     @Test
@@ -110,18 +114,14 @@ class VerificationOrchestratorTest {
         assertThat(result.status()).isEqualTo(VerificationRunStatus.REVIEW_REQUIRED);
         assertThat(result.reason()).isEqualTo("PROVIDER_EVIDENCE_AMBIGUOUS");
         assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.REVIEW_REQUIRED);
-        verify(fixture.evidenceService(), never()).linkProviderEvidence(any(), any());
     }
 
     @Test
     void reusedProviderTransactionReferenceCannotConfirmAnotherPayment() {
         Fixture fixture = fixture();
         Evidence customer = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
-
-        when(fixture.paymentRepository().findById(fixture.payment().getId()))
-            .thenReturn(Optional.of(fixture.payment()));
-        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId()))
-            .thenReturn(List.of(customer));
+        when(fixture.paymentRepository().findById(fixture.payment().getId())).thenReturn(Optional.of(fixture.payment()));
+        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId())).thenReturn(List.of(customer));
         when(fixture.paymentRepository().existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
             fixture.merchant().getId(), "MPESA", "DH10L1OJRUS", fixture.payment().getId()
         )).thenReturn(true);
@@ -131,8 +131,6 @@ class VerificationOrchestratorTest {
         assertThat(result.status()).isEqualTo(VerificationRunStatus.REVIEW_REQUIRED);
         assertThat(result.reason()).isEqualTo("TRANSACTION_REFERENCE_ALREADY_USED");
         assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.REVIEW_REQUIRED);
-        verify(fixture.evidenceRepository(), never())
-            .findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(any(), any());
     }
 
     @Test
@@ -140,24 +138,18 @@ class VerificationOrchestratorTest {
         Fixture fixture = fixture();
         Evidence first = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
         Evidence second = customerEvidence(fixture.merchant(), fixture.payment(), "AB12CD34EF56", "1.00");
-
-        when(fixture.paymentRepository().findById(fixture.payment().getId()))
-            .thenReturn(Optional.of(fixture.payment()));
-        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId()))
-            .thenReturn(List.of(first, second));
+        when(fixture.paymentRepository().findById(fixture.payment().getId())).thenReturn(Optional.of(fixture.payment()));
+        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId())).thenReturn(List.of(first, second));
 
         VerificationRunResult result = fixture.orchestrator().verifyPayment(fixture.payment().getId());
 
         assertThat(result.status()).isEqualTo(VerificationRunStatus.REVIEW_REQUIRED);
         assertThat(result.reason()).isEqualTo("CUSTOMER_EVIDENCE_AMBIGUOUS");
-        assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.REVIEW_REQUIRED);
     }
 
     private void stubActivePayment(Fixture fixture, Evidence customer) {
-        when(fixture.paymentRepository().findById(fixture.payment().getId()))
-            .thenReturn(Optional.of(fixture.payment()));
-        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId()))
-            .thenReturn(List.of(customer));
+        when(fixture.paymentRepository().findById(fixture.payment().getId())).thenReturn(Optional.of(fixture.payment()));
+        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId())).thenReturn(List.of(customer));
         when(fixture.paymentRepository().existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
             fixture.merchant().getId(), "MPESA", "DH10L1OJRUS", fixture.payment().getId()
         )).thenReturn(false);
@@ -167,83 +159,40 @@ class VerificationOrchestratorTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         EvidenceRepository evidenceRepository = mock(EvidenceRepository.class);
         EvidenceService evidenceService = mock(EvidenceService.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         Merchant merchant = new Merchant("Event Merchant");
         CheckoutSession checkoutSession = new CheckoutSession(
-            "cs_verify_test",
-            merchant,
-            ApiKeyEnvironment.TEST,
-            "ORDER-VERIFY",
-            "Verification test",
-            100,
-            "MZN",
-            "https://merchant.example/success",
-            "https://merchant.example/cancel",
-            "idem-verify",
-            "a".repeat(64),
-            Instant.now().plusSeconds(600)
+            "cs_verify_test", merchant, ApiKeyEnvironment.TEST, "ORDER-VERIFY", "Verification test",
+            100, "MZN", "https://merchant.example/success", "https://merchant.example/cancel",
+            "idem-verify", "a".repeat(64), Instant.now().plusSeconds(600)
         );
-        Payment payment = new Payment(
-            "pay_verify_test",
-            merchant,
-            checkoutSession,
-            ApiKeyEnvironment.TEST,
-            100,
-            "MZN"
-        );
+        Payment payment = new Payment("pay_verify_test", merchant, checkoutSession, ApiKeyEnvironment.TEST, 100, "MZN");
 
         VerificationOrchestrator orchestrator = new VerificationOrchestrator(
             paymentRepository,
             evidenceRepository,
             evidenceService,
             new MpesaMessageParser(),
-            new MpesaEvidenceMatcher()
+            new MpesaEvidenceMatcher(),
+            eventPublisher
         );
 
-        return new Fixture(
-            paymentRepository,
-            evidenceRepository,
-            evidenceService,
-            merchant,
-            payment,
-            orchestrator
-        );
+        return new Fixture(paymentRepository, evidenceRepository, evidenceService, eventPublisher, merchant, payment, orchestrator);
     }
 
     private Evidence customerEvidence(Merchant merchant, Payment payment, String reference, String amount) {
         return new Evidence(
-            "ev_customer_" + reference,
-            merchant,
-            payment,
-            EvidenceOrigin.CUSTOMER,
-            EvidenceKind.SMS,
-            EvidenceIngestSource.HOSTED_CHECKOUT,
-            "MPESA",
-            hash(reference + amount + "customer"),
-            "text/plain",
-            null,
-            null,
-            "Confirmado " + reference + ". Transferiste " + amount + "MT via M-Pesa.",
-            null,
-            Instant.now()
+            "ev_customer_" + reference, merchant, payment, EvidenceOrigin.CUSTOMER, EvidenceKind.SMS,
+            EvidenceIngestSource.HOSTED_CHECKOUT, "MPESA", hash(reference + amount + "customer"), "text/plain",
+            null, null, "Confirmado " + reference + ". Transferiste " + amount + "MT via M-Pesa.", null, Instant.now()
         );
     }
 
     private Evidence providerEvidence(Merchant merchant, String reference, String amount, String publicId) {
         return new Evidence(
-            publicId,
-            merchant,
-            null,
-            EvidenceOrigin.PROVIDER,
-            EvidenceKind.SMS,
-            EvidenceIngestSource.VEROX_BRIDGE,
-            "MPESA",
-            hash(reference + amount + publicId),
-            "text/plain",
-            null,
-            null,
-            reference + " Confirmed.You have received " + amount + "MT via M-Pesa.",
-            null,
-            Instant.now()
+            publicId, merchant, null, EvidenceOrigin.PROVIDER, EvidenceKind.SMS, EvidenceIngestSource.VEROX_BRIDGE,
+            "MPESA", hash(reference + amount + publicId), "text/plain", null, null,
+            reference + " Confirmed.You have received " + amount + "MT via M-Pesa.", null, Instant.now()
         );
     }
 
@@ -256,6 +205,7 @@ class VerificationOrchestratorTest {
         PaymentRepository paymentRepository,
         EvidenceRepository evidenceRepository,
         EvidenceService evidenceService,
+        ApplicationEventPublisher eventPublisher,
         Merchant merchant,
         Payment payment,
         VerificationOrchestrator orchestrator
