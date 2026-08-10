@@ -137,7 +137,6 @@ public class VerificationOrchestrator {
         }
 
         payment.beginVerification();
-        paymentRepository.save(payment);
 
         List<ProviderCandidate> sameReferenceProviders = evidenceRepository
             .findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
