@@ -8,15 +8,15 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 **PHASE 3 — VEROX Verification Engine**
 
-Status: **IN PROGRESS — PARSER + CONSERVATIVE MATCHER VALIDATED; VERIFICATION ORCHESTRATOR IMPLEMENTED, LOCAL VALIDATION PENDING**
+Status: **IN PROGRESS — PARSER + MATCHER + ORCHESTRATOR VALIDATED; AUTOMATIC AFTER-COMMIT VERIFICATION TRIGGER IMPLEMENTED, LOCAL VALIDATION PENDING**
 
 Current task:
 
-`VX-VERIFY-03-VALIDATE — Validate verification orchestration, controlled Payment transitions and provider-reference reuse protection locally`
+`VX-VERIFY-04-VALIDATE — Validate automatic verification triggers after committed CUSTOMER/PROVIDER Evidence and run runtime end-to-end confirmation`
 
 Next task after validation:
 
-`VX-VERIFY-04 — Trigger verification automatically after committed CUSTOMER/PROVIDER Evidence ingestion and run runtime end-to-end confirmation`
+`VX-VERIFY-05 — Complete Checkout Session on confirmed Payment and close Verification Engine runtime acceptance`
 
 ## Delivery strategy
 
@@ -141,9 +141,9 @@ Implemented and validated:
 - matcher does not link Evidence, mutate Payment or emit webhooks
 - full local suite passed with 29 tests, 0 failures and 0 errors after matcher implementation
 
-### VX-VERIFY-03 — VERIFICATION ORCHESTRATOR IMPLEMENTED / LOCAL VALIDATION PENDING
+### VX-VERIFY-03 — VERIFICATION ORCHESTRATOR DONE / LOCAL VALIDATED
 
-Implemented:
+Implemented and validated:
 
 - internal `VerificationOrchestrator` separated from Evidence ingestion endpoints
 - reads CUSTOMER Evidence already linked to a Payment
@@ -158,28 +158,44 @@ Implemented:
 - provider + provider transaction reference are persisted only after deterministic match
 - application-level provider-reference reuse check prevents known reuse across Payments
 - Flyway V5 adds a database unique index on `(merchant_id, provider, provider_transaction_reference)` as a final replay/concurrency safety barrier
-- orchestrator unit tests cover deterministic confirmation, unrelated provider Evidence, amount conflict, provider ambiguity, transaction-reference reuse and conflicting customer evidence
-- orchestrator is not yet automatically triggered by ingestion; this is intentionally the next integration step after isolated validation
+- full local suite passed with 35 tests, 0 failures and 0 errors after orchestrator implementation
+
+### VX-VERIFY-04 — AUTOMATIC AFTER-COMMIT TRIGGER IMPLEMENTED / LOCAL VALIDATION PENDING
+
+Implemented:
+
+- Evidence Infrastructure owns a neutral `EvidenceIngestedEvent`
+- Customer Message ingestion publishes the event with its linked `paymentId`
+- VEROX Bridge ingestion publishes the event with Merchant scope while provider Evidence is still unlinked
+- Verification Engine owns `VerificationEvidenceIngestedListener`; Bridge does not depend on matcher/orchestrator internals
+- listener runs in `AFTER_COMMIT`, so verification only sees committed Evidence
+- CUSTOMER event triggers verification only for its Payment
+- PROVIDER event triggers active-Payment verification for the Merchant, allowing provider-first arrival
+- verification exceptions after commit are logged and do not roll back or lose immutable Evidence
+- duplicate/replayed Evidence may retrigger verification safely without creating duplicate Evidence
+- unit tests cover event publication, CUSTOMER routing, PROVIDER routing and post-commit verification failure isolation
 
 Validation gate:
 
 1. pull latest `main`
 2. run full local test suite
-3. confirm orchestrator tests pass with zero failures/errors
-4. start backend and apply Flyway V5 successfully
+3. start backend and apply Flyway V5 successfully
+4. create a fresh 1.00 MZN Checkout Session
+5. submit CUSTOMER message with one unique transaction reference
+6. confirm Payment waits for provider (`VERIFYING`)
+7. submit matching PROVIDER message through VEROX Bridge
+8. confirm Payment becomes `CONFIRMED`
+9. confirm provider `ev_*` is linked to the correct `pay_*`
+10. confirm `provider_transaction_reference` is persisted
+11. repeat with PROVIDER arriving before CUSTOMER
 
-### VX-VERIFY-04 — NEXT
+### VX-VERIFY-05 — NEXT
 
 Planned:
 
-1. trigger `verifyPayment(...)` after committed Customer Evidence ingestion
-2. trigger Merchant active-payment verification after committed Provider Evidence ingestion
-3. keep raw Evidence persistence independent from verification failures
-4. run a full runtime pair: Checkout → CUSTOMER message + Bridge PROVIDER message
-5. confirm provider `ev_*` becomes linked to the correct `pay_*`
-6. confirm Payment becomes `CONFIRMED`
-7. confirm provider transaction reference is persisted exactly once
-8. confirm reverse evidence arrival order also works
+- transition the owning Checkout Session from `OPEN` to `COMPLETED` when Payment becomes `CONFIRMED`
+- preserve redirect URLs as UX only; Payment/Webhook remains source of truth
+- close Verification Engine runtime acceptance before Webhook Delivery implementation
 
 ### Verification safety rule — LOCKED
 
