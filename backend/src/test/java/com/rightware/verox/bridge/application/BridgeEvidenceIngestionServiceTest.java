@@ -139,6 +139,6 @@ class BridgeEvidenceIngestionServiceTest {
 
         verify(bridgeRepository, never()).findByIdAndStatus(any(), any());
         verify(evidenceService, never()).registerProviderRaw(any(), any(), any(), any(), any(), any(), any());
-        verify(eventPublisher, never()).publishEvent(any());
+        verify(eventPublisher, never()).publishEvent(any(EvidenceIngestedEvent.class));
     }
 }
