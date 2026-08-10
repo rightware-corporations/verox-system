@@ -1,6 +1,5 @@
 package com.rightware.verox.webhook.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rightware.verox.common.id.ResourceIdGenerator;
 import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.merchant.repository.MerchantRepository;
@@ -14,6 +13,7 @@ import com.rightware.verox.webhook.repository.WebhookEndpointRepository;
 import com.rightware.verox.webhook.repository.WebhookEventRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -33,7 +33,7 @@ class WebhookOutboxServiceTest {
         WebhookEventRepository eventRepository = mock(WebhookEventRepository.class);
         WebhookDeliveryRepository deliveryRepository = mock(WebhookDeliveryRepository.class);
         ResourceIdGenerator idGenerator = mock(ResourceIdGenerator.class);
-        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        JsonMapper jsonMapper = JsonMapper.builder().findAndAddModules().build();
 
         Merchant merchant = new Merchant("Event Merchant");
         WebhookEndpoint endpoint = new WebhookEndpoint("whep_test", merchant, "https://merchant.example/webhooks/verox");
@@ -55,7 +55,7 @@ class WebhookOutboxServiceTest {
         when(deliveryRepository.save(any(WebhookDelivery.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         WebhookOutboxService service = new WebhookOutboxService(
-            merchantRepository, endpointRepository, eventRepository, deliveryRepository, idGenerator, objectMapper
+            merchantRepository, endpointRepository, eventRepository, deliveryRepository, idGenerator, jsonMapper
         );
 
         WebhookEvent event = service.enqueuePaymentConfirmed(confirmed);
