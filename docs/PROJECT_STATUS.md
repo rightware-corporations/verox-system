@@ -6,17 +6,17 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 ## Current phase
 
-**PHASE 4 — VEROX Webhook Delivery**
+**BACKEND ACCEPTANCE CLOSEOUT**
 
-Status: **IN PROGRESS — VX-WEBHOOK-01 RUNTIME VALIDATED; VX-WEBHOOK-02 HTTP DELIVERY + RETRY IMPLEMENTED, LOCAL VALIDATION PENDING**
+Status: **IN PROGRESS — PHASE 4 LOCAL RUNTIME VALIDATED; REVERSE ARRIVAL-ORDER + EVIDENCE/CREDENTIAL CLOSEOUT REMAINS**
 
 Current task:
 
-`VX-WEBHOOK-02-VALIDATE — Validate signed HTTP POST delivery, success persistence and bounded retry/backoff`
+`BACKEND-ACCEPTANCE-01 — Runtime E2E with PROVIDER Evidence arriving before CUSTOMER Evidence; confirm Payment, Checkout and webhook reach the same deterministic final state`
 
 Next task after validation:
 
-`BACKEND ACCEPTANCE CLOSEOUT — reverse Provider-before-Customer E2E + remaining evidence/credential replay checks, then PHASE 5 hardening/Railway`
+`BACKEND-ACCEPTANCE-02 — Close duplicate Customer Evidence replay and opposite-direction credential isolation checks, then PHASE 5 hardening/Railway`
 
 ## Delivery strategy
 
@@ -149,6 +149,8 @@ OCR output is never sufficient by itself to confirm a payment.
 
 ## Phase 4 — VEROX Webhook Delivery
 
+Status: **DONE — LOCAL RUNTIME E2E + RETRY RECOVERY VALIDATED**
+
 ### VX-WEBHOOK-01 — DONE / LOCAL RUNTIME OUTBOX VALIDATED
 
 Implemented and validated:
@@ -173,9 +175,9 @@ Implemented and validated:
 - runtime confirmed one `evt_* / payment.confirmed / PAYMENT` row for a newly confirmed Payment
 - runtime confirmed one `wd_* / PENDING / attempt_count=0` row linked to the active `whep_*`
 
-### VX-WEBHOOK-02 — HTTP DELIVERY + RETRY IMPLEMENTED / LOCAL VALIDATION PENDING
+### VX-WEBHOOK-02 — DONE / LOCAL RUNTIME HTTP + RETRY RECOVERY VALIDATED
 
-Implemented:
+Implemented and validated:
 
 - scheduled persistent delivery worker reads due `PENDING` / `FAILED` deliveries
 - raw persisted webhook payload is POSTed as `application/json`
@@ -187,22 +189,34 @@ Implemented:
 - retries use configurable base/max delay and configurable maximum attempts
 - after maximum attempts the delivery becomes `EXHAUSTED` and leaves the retry index
 - Payment and Checkout state are never changed by webhook delivery outcomes
-- local merchant receiver script added at `infrastructure/dev/webhook-receiver.ps1`
+- local merchant receiver script exists at `infrastructure/dev/webhook-receiver.ps1`
 - development receiver validates the real HMAC signature before returning HTTP 200
 - delivery state-machine and signed-delivery unit tests added
-- no new Flyway migration is required because V6 already contains all attempt/result fields
+- no new Flyway migration was required because V6 already contains all attempt/result fields
+- full local suite passed with 46 tests, 0 failures and 0 errors
+- runtime receiver accepted a signed `payment.confirmed` payload and VEROX persisted `SUCCEEDED`, `attempt_count = 1`, HTTP 200 and `delivered_at`
+- runtime offline test persisted repeated `FAILED` attempts and reached bounded `EXHAUSTED` at the configured maximum of 8 attempts
+- runtime recovery test used the same persistent `wd_*`: attempts 1–3 failed while the endpoint was unavailable, attempt 4 succeeded after endpoint recovery
+- PostgreSQL audit confirmed the recovered delivery as `SUCCEEDED`, `attempt_count = 4`, `last_status_code = 200`, empty `last_error`, populated `delivered_at`, and event type `payment.confirmed`
 
-Validation gate:
+## Backend Acceptance Closeout
 
-1. pull latest `main`
-2. run full local test suite
-3. restart VEROX Server
-4. with no receiver listening, confirm an existing/new due delivery becomes `FAILED`, increments `attempt_count` and receives a future `next_attempt_at`
-5. start `infrastructure/dev/webhook-receiver.ps1` with the merchant `whsec_*` supplied only through a local environment variable
-6. confirm the receiver accepts a retry only when `VEROX-Signature` is valid
-7. confirm the same `wd_*` becomes `SUCCEEDED`, `last_status_code = 200` and `delivered_at` is populated
-8. confirm no second webhook event/delivery row is created for the same Payment event
-9. run one fresh confirmed-payment E2E with receiver already online and confirm direct first-attempt success
+### BACKEND-ACCEPTANCE-01 — CURRENT
+
+- run a fresh Checkout/Payment
+- ingest PROVIDER Evidence first through VEROX Bridge
+- confirm Payment remains safely waiting for CUSTOMER Evidence
+- ingest CUSTOMER Evidence second through Hosted Checkout endpoint
+- confirm the same Provider Evidence is linked deterministically
+- confirm Payment becomes `CONFIRMED`
+- confirm Checkout Session becomes `COMPLETED`
+- confirm `payment.confirmed` webhook is delivered successfully
+
+### BACKEND-ACCEPTANCE-02 — NEXT
+
+- duplicate identical Customer Evidence replay/database-count validation
+- opposite-direction merchant-key / bridge-key endpoint isolation check
+- final backend Definition-of-Done audit before Phase 5
 
 ## Phase 5 — Backend Hardening / Railway Deployment
 
