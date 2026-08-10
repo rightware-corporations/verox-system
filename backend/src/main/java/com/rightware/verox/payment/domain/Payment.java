@@ -17,6 +17,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -105,6 +106,43 @@ public class Payment {
     @PreUpdate
     void preUpdate() {
         updatedAt = Instant.now();
+    }
+
+    public void beginVerification() {
+        if (status == PaymentStatus.PENDING) {
+            status = PaymentStatus.VERIFYING;
+            return;
+        }
+        if (status != PaymentStatus.VERIFYING) {
+            throw new IllegalStateException("Payment cannot enter VERIFYING from " + status);
+        }
+    }
+
+    public void requireReview() {
+        if (status == PaymentStatus.REVIEW_REQUIRED) {
+            return;
+        }
+        if (status != PaymentStatus.PENDING && status != PaymentStatus.VERIFYING) {
+            throw new IllegalStateException("Payment cannot enter REVIEW_REQUIRED from " + status);
+        }
+        status = PaymentStatus.REVIEW_REQUIRED;
+    }
+
+    public void confirm(String provider, String transactionReference, Instant confirmedAt) {
+        if (status != PaymentStatus.VERIFYING) {
+            throw new IllegalStateException("Payment can only be confirmed from VERIFYING");
+        }
+        this.provider = normalizeRequired(provider, "provider");
+        this.providerTransactionReference = normalizeRequired(transactionReference, "transactionReference");
+        this.confirmedAt = confirmedAt == null ? Instant.now() : confirmedAt;
+        this.status = PaymentStatus.CONFIRMED;
+    }
+
+    private String normalizeRequired(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " is required");
+        }
+        return value.trim().toUpperCase(Locale.ROOT);
     }
 
     public UUID getId() {
