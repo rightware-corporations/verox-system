@@ -1,7 +1,5 @@
 package com.rightware.verox.webhook.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rightware.verox.common.id.ResourceIdGenerator;
 import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.merchant.repository.MerchantRepository;
@@ -16,6 +14,8 @@ import com.rightware.verox.webhook.repository.WebhookEventRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -31,7 +31,7 @@ public class WebhookOutboxService {
     private final WebhookEventRepository eventRepository;
     private final WebhookDeliveryRepository deliveryRepository;
     private final ResourceIdGenerator resourceIdGenerator;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     public WebhookOutboxService(
         MerchantRepository merchantRepository,
@@ -39,14 +39,14 @@ public class WebhookOutboxService {
         WebhookEventRepository eventRepository,
         WebhookDeliveryRepository deliveryRepository,
         ResourceIdGenerator resourceIdGenerator,
-        ObjectMapper objectMapper
+        JsonMapper jsonMapper
     ) {
         this.merchantRepository = merchantRepository;
         this.endpointRepository = endpointRepository;
         this.eventRepository = eventRepository;
         this.deliveryRepository = deliveryRepository;
         this.resourceIdGenerator = resourceIdGenerator;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -117,8 +117,8 @@ public class WebhookOutboxService {
         payload.put("data", data);
 
         try {
-            return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException exception) {
+            return jsonMapper.writeValueAsString(payload);
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Unable to serialize webhook event payload", exception);
         }
     }
