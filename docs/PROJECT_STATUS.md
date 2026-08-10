@@ -6,17 +6,17 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 ## Current phase
 
-**BACKEND ACCEPTANCE CLOSEOUT**
+**BACKEND DEFINITION-OF-DONE AUDIT**
 
-Status: **IN PROGRESS — BACKEND-ACCEPTANCE-01 DONE; CUSTOMER EVIDENCE REPLAY + CREDENTIAL ISOLATION REMAIN**
+Status: **IN PROGRESS — BACKEND ACCEPTANCE CLOSEOUT DONE; FINAL LOCAL BACKEND AUDIT REMAINS BEFORE PHASE 5**
 
 Current task:
 
-`BACKEND-ACCEPTANCE-02 — Close duplicate Customer Evidence replay and opposite-direction merchant-key / bridge-key endpoint isolation checks`
+`BACKEND-DOD-AUDIT — Audit the MVP backend Definition of Done against the validated local runtime evidence and identify only the remaining deployment/hardening gates`
 
 Next task after validation:
 
-`BACKEND DEFINITION-OF-DONE AUDIT — Final local backend audit, then PHASE 5 hardening/Railway`
+`PHASE 5 — Backend Hardening / Railway Deployment`
 
 ## Delivery strategy
 
@@ -77,7 +77,7 @@ Implemented and validated:
 - customer evidence can be linked directly to Payment
 - evidence deduplication support
 
-### VX-BRIDGE-01 — FUNCTIONAL RUNTIME VALIDATED
+### VX-BRIDGE-01 — DONE / LOCAL RUNTIME VALIDATED
 
 Implemented and validated:
 
@@ -93,9 +93,10 @@ Implemented and validated:
 - provider Evidence remains `payment_id = NULL` until Verification Engine matching
 - identical provider SMS replay returns the same `ev_*`
 - database count remained one after replay
-- at least one cross-credential misuse path returned HTTP 401; opposite-direction isolation check remains a backend acceptance closeout item
+- Bridge credential presented to Merchant API returned HTTP 401
+- Merchant credential presented to Bridge evidence API returned HTTP 401
 
-### VX-EVIDENCE-02 — CUSTOMER MESSAGE FLOW FUNCTIONAL RUNTIME VALIDATED
+### VX-EVIDENCE-02 — DONE / LOCAL RUNTIME VALIDATED
 
 Implemented and runtime validated:
 
@@ -109,7 +110,8 @@ Implemented and runtime validated:
 - customer Evidence is linked directly to the Checkout Session Payment
 - provider recorded as `MPESA` for the MVP
 - endpoint response returned `ev_*`, `cs_*`, `pay_*`, `CUSTOMER`, `SMS`, `HOSTED_CHECKOUT`, `MPESA`
-- duplicate identical customer-message replay/database-count validation remains a backend acceptance closeout item
+- duplicate identical customer-message replay returned the same `ev_*`
+- PostgreSQL audit confirmed exactly one CUSTOMER Evidence row after identical replay
 
 ## Phase 3 — VEROX Verification Engine
 
@@ -198,6 +200,8 @@ Implemented and validated:
 
 ## Backend Acceptance Closeout
 
+Status: **DONE — LOCAL RUNTIME ACCEPTANCE VALIDATED**
+
 ### BACKEND-ACCEPTANCE-01 — DONE / PROVIDER-FIRST FULL FLOW VALIDATED
 
 Validated:
@@ -215,11 +219,15 @@ Validated:
 - runtime audit confirmed `attempt_count = 1`, `last_status_code = 200`, empty `last_error` and populated `delivered_at`
 - event-count audit returned exactly `1` for the Provider-first Payment
 
-### BACKEND-ACCEPTANCE-02 — CURRENT
+### BACKEND-ACCEPTANCE-02 — DONE / REPLAY + CREDENTIAL ISOLATION VALIDATED
 
-- duplicate identical Customer Evidence replay/database-count validation
-- opposite-direction merchant-key / bridge-key endpoint isolation check
-- final backend Definition-of-Done audit before Phase 5
+Validated:
+
+- identical CUSTOMER Evidence submitted twice returned the same `ev_*`
+- PostgreSQL audit confirmed exactly one CUSTOMER Evidence row for the Payment
+- Bridge credential presented to `GET /v1/account` returned HTTP 401
+- Merchant credential presented to `POST /v1/bridges/{bridgeId}/evidence` returned HTTP 401
+- Merchant and Bridge credential namespaces are runtime-isolated in both directions
 
 ## Phase 5 — Backend Hardening / Railway Deployment
 
