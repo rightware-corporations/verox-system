@@ -45,6 +45,8 @@ verox:
   checkout:
     base-url: ${VEROX_CHECKOUT_BASE_URL:http://localhost:3000}
     session-ttl-minutes: ${VEROX_CHECKOUT_TTL_MINUTES:15}
+  webhook:
+    master-secret: ${VEROX_WEBHOOK_MASTER_SECRET:verox-dev-webhook-master-secret-change-me}
 
 logging:
   level:
