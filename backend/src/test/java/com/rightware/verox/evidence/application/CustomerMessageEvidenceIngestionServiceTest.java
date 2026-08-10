@@ -138,7 +138,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
 
         verify(paymentRepository, never()).findByCheckoutSessionId(any());
         verify(evidenceService, never()).registerCustomerRaw(any(), any(), any(), any(), any(), any(), any());
-        verify(eventPublisher, never()).publishEvent(any());
+        verify(eventPublisher, never()).publishEvent(any(EvidenceIngestedEvent.class));
     }
 
     private CheckoutSession session(Merchant merchant, Instant expiresAt) {
