@@ -128,6 +128,17 @@ public class CheckoutSession {
         updatedAt = Instant.now();
     }
 
+    public void complete(Instant completedAt) {
+        if (status == CheckoutSessionStatus.COMPLETED) {
+            return;
+        }
+        if (status != CheckoutSessionStatus.OPEN) {
+            throw new IllegalStateException("Checkout Session cannot be completed from " + status);
+        }
+        this.completedAt = completedAt == null ? Instant.now() : completedAt;
+        this.status = CheckoutSessionStatus.COMPLETED;
+    }
+
     public UUID getId() {
         return id;
     }
