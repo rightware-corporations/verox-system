@@ -88,6 +88,74 @@ public class WebhookDelivery {
         updatedAt = Instant.now();
     }
 
+    public boolean isAttemptableAt(Instant now) {
+        Instant effectiveNow = now == null ? Instant.now() : now;
+        return (status == WebhookDeliveryStatus.PENDING || status == WebhookDeliveryStatus.FAILED)
+            && !nextAttemptAt.isAfter(effectiveNow);
+    }
+
+    public void recordSuccess(int statusCode, Instant attemptedAt) {
+        if (status == WebhookDeliveryStatus.SUCCEEDED) {
+            return;
+        }
+        if (status == WebhookDeliveryStatus.EXHAUSTED) {
+            throw new IllegalStateException("Exhausted webhook delivery cannot succeed without a new delivery");
+        }
+        Instant effectiveAttemptedAt = attemptedAt == null ? Instant.now() : attemptedAt;
+        attemptCount++;
+        lastAttemptAt = effectiveAttemptedAt;
+        lastStatusCode = statusCode;
+        lastError = null;
+        deliveredAt = effectiveAttemptedAt;
+        nextAttemptAt = effectiveAttemptedAt;
+        status = WebhookDeliveryStatus.SUCCEEDED;
+    }
+
+    public void recordFailure(
+        Integer statusCode,
+        String error,
+        Instant attemptedAt,
+        Instant retryAt,
+        int maxAttempts
+    ) {
+        if (status == WebhookDeliveryStatus.SUCCEEDED) {
+            throw new IllegalStateException("Succeeded webhook delivery cannot fail");
+        }
+        if (status == WebhookDeliveryStatus.EXHAUSTED) {
+            return;
+        }
+        if (maxAttempts < 1) {
+            throw new IllegalArgumentException("maxAttempts must be at least 1");
+        }
+
+        Instant effectiveAttemptedAt = attemptedAt == null ? Instant.now() : attemptedAt;
+        attemptCount++;
+        lastAttemptAt = effectiveAttemptedAt;
+        lastStatusCode = statusCode;
+        lastError = normalizeError(error);
+        deliveredAt = null;
+
+        if (attemptCount >= maxAttempts) {
+            status = WebhookDeliveryStatus.EXHAUSTED;
+            nextAttemptAt = effectiveAttemptedAt;
+            return;
+        }
+
+        if (retryAt == null || !retryAt.isAfter(effectiveAttemptedAt)) {
+            throw new IllegalArgumentException("retryAt must be after attemptedAt for a retryable failure");
+        }
+        status = WebhookDeliveryStatus.FAILED;
+        nextAttemptAt = retryAt;
+    }
+
+    private String normalizeError(String error) {
+        if (error == null || error.isBlank()) {
+            return "WEBHOOK_DELIVERY_FAILED";
+        }
+        String normalized = error.trim();
+        return normalized.length() <= 2000 ? normalized : normalized.substring(0, 2000);
+    }
+
     public UUID getId() { return id; }
     public String getPublicId() { return publicId; }
     public WebhookEvent getEvent() { return event; }
