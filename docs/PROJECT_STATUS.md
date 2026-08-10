@@ -6,17 +6,17 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 ## Current phase
 
-**BACKEND DEFINITION-OF-DONE AUDIT**
+**PHASE 5 — Backend Hardening / Railway Deployment**
 
-Status: **IN PROGRESS — BACKEND ACCEPTANCE CLOSEOUT DONE; FINAL LOCAL BACKEND AUDIT REMAINS BEFORE PHASE 5**
+Status: **IN PROGRESS — LOCAL BACKEND FUNCTIONAL DOD VALIDATED; PRODUCTION HARDENING + RAILWAY DEPLOYMENT GATE REMAIN**
 
 Current task:
 
-`BACKEND-DOD-AUDIT — Audit the MVP backend Definition of Done against the validated local runtime evidence and identify only the remaining deployment/hardening gates`
+`VX-HARDEN-01 — Establish the production configuration/security baseline: remove Spring Security development credential behavior, require production webhook master secret, keep bootstraps disabled by default, and make PORT/health configuration Railway-safe`
 
 Next task after validation:
 
-`PHASE 5 — Backend Hardening / Railway Deployment`
+`VX-RAILWAY-01 — Provision Railway PostgreSQL, deploy VEROX Server staging, run Flyway migrations and execute production-like end-to-end validation`
 
 ## Delivery strategy
 
@@ -229,22 +229,53 @@ Validated:
 - Merchant credential presented to `POST /v1/bridges/{bridgeId}/evidence` returned HTTP 401
 - Merchant and Bridge credential namespaces are runtime-isolated in both directions
 
+## Backend Definition-of-Done Audit
+
+Status: **DONE FOR LOCAL FUNCTIONAL BACKEND — DEPLOYMENT GATE MOVED TO PHASE 5**
+
+Final validation:
+
+- final local Maven suite passed with **46 tests, 0 failures, 0 errors, 0 skipped**
+- Maven result: **BUILD SUCCESS**
+- local runtime validation covers Checkout creation, Customer Evidence, Provider Evidence through Bridge, both evidence arrival orders, deterministic verification, Payment confirmation, Checkout completion, replay protection, credential isolation, persistent signed webhooks and bounded retry/recovery
+- the payment-verification flow itself does not require manual database intervention; PostgreSQL queries used during acceptance were audits only
+- Backend Definition-of-Done items 1–12, 14 and 15 are locally validated
+- item 13 (`flow runs on Railway with PostgreSQL`) remains the explicit deployment gate and is owned by Phase 5
+
 ## Phase 5 — Backend Hardening / Railway Deployment
 
-Planned:
+Status: **IN PROGRESS**
 
-- remove/default-disable Spring Security development credential behavior
-- require production webhook master secret with no development fallback
-- production secrets
+### VX-HARDEN-01 — CURRENT
+
+Production configuration/security baseline:
+
+- remove/default-disable Spring Security generated development credential behavior
+- require a strong production `VEROX_WEBHOOK_MASTER_SECRET`; development fallback must not be usable in production
+- keep Merchant and Bridge bootstrap disabled by default and explicitly controlled by environment
+- make server port configuration Railway-safe
+- preserve a reliable health endpoint for Railway health checks
+- keep production secrets outside source control
+
+### Remaining Phase 5 hardening/deployment gates
+
 - rate limiting
 - audit/security logging
 - evidence retention/access rules
 - SSRF/network-egress policy for production webhook endpoints while preserving local development support
 - Railway PostgreSQL
-- optional durable object storage for supplementary uploads
-- Railway `PORT` + healthcheck
+- optional durable object storage only if supplementary uploads enter MVP scope
 - staging deployment
 - production-like end-to-end validation
+
+### VX-RAILWAY-01 — NEXT
+
+- provision Railway PostgreSQL
+- configure production/staging secrets and environment
+- deploy VEROX Server
+- confirm Flyway V1–V6 apply cleanly
+- confirm health/readiness
+- execute production-like Checkout → Evidence → Verification → Payment → Webhook E2E
 
 ## Phase 6 — Hosted Checkout Frontend
 
@@ -277,6 +308,8 @@ The backend is not complete until:
 13. flow runs on Railway with PostgreSQL
 14. OCR alone can never confirm a payment
 15. no manual database intervention is required
+
+Current audit result: **1–12, 14 and 15 validated locally; 13 remains open and is the Phase 5 deployment gate.**
 
 ## Scope rule
 
