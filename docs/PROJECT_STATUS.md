@@ -6,17 +6,17 @@ Deliver an operational VEROX MVP in four days for the first real integration.
 
 ## Current phase
 
-**PHASE 2 — Backend Completion / Evidence Infrastructure**
+**PHASE 3 — VEROX Verification Engine**
 
-Status: **IN PROGRESS — BRIDGE FUNCTIONAL RUNTIME VALIDATED; CUSTOMER MESSAGE INGESTION IMPLEMENTED, LOCAL VALIDATION PENDING**
+Status: **IN PROGRESS — M-PESA CUSTOMER/PROVIDER MESSAGE PARSER IMPLEMENTED, LOCAL VALIDATION PENDING**
 
 Current task:
 
-`VX-EVIDENCE-02-MESSAGE-VALIDATE — Validate pasted customer M-Pesa confirmation message ingestion locally`
+`VX-VERIFY-01-VALIDATE — Validate conservative M-Pesa CUSTOMER and PROVIDER message parsing locally`
 
 Next task after validation:
 
-`VX-VERIFY-01 — Implement M-Pesa message parsing for CUSTOMER and PROVIDER evidence`
+`VX-VERIFY-02 — Implement deterministic CUSTOMER ↔ PROVIDER matching and verification orchestration`
 
 ## Delivery strategy
 
@@ -40,222 +40,180 @@ An uploaded screenshot/image may be supported as supplementary evidence, but OCR
 
 Status: **DONE — LOCAL RUNTIME VALIDATED**
 
-### Completed in implementation
+Implemented and validated:
 
-- Product boundary defined
-- Hosted checkout ownership defined
-- Payment source-of-truth rule defined
-- MVP repository structure defined
 - Java 21 / Spring Boot backend foundation
-- PostgreSQL + Flyway baseline
-- Health/Actuator foundation
-- Merchant domain model
-- API key generation and SHA-256 storage
-- Stateless Bearer API key authentication
-- `GET /v1/account`
-- One-time MVP merchant bootstrap
-- Checkout Session schema and domain model
-- Payment schema and domain model
+- PostgreSQL + Flyway
+- Merchant domain and API keys
+- stateless Bearer merchant authentication
+- one-time merchant bootstrap
+- Checkout Session + Payment persistence
 - `POST /v1/checkout/sessions`
 - `GET /v1/checkout/sessions/{id}`
 - `GET /v1/payments/{id}`
-- Merchant-scoped resource access
-- Amount normalization to MZN minor units
-- Idempotency-Key request fingerprinting
-- Non-enumerable `cs_*` and `pay_*` public identifiers
-- Hosted checkout URL generation
+- `GET /v1/account`
+- merchant-scoped resources
+- MZN minor-unit normalization
+- idempotency and request fingerprinting
+- non-enumerable `cs_*` and `pay_*` IDs
+- Hosted Checkout URL generation
 - API error envelope
-- Core authentication and checkout unit tests
-- Maven Wrapper for Windows/local development
-- Spring Boot Flyway starter integration
+- Maven Wrapper and local PostgreSQL runtime validation
 
-### Validated locally
-
-- Java runtime available
-- Maven Wrapper 3.9.16 works
-- backend compiles successfully with `release 21`
-- PostgreSQL 18.4 installed and running
-- local `verox` role/database connection works
-- Flyway V1 and V2 migrations apply successfully
-- backend starts successfully with PostgreSQL
-- `/actuator/health` returns `UP`
-- bootstrap provisions a merchant and `vx_test_*` API key
-- valid VEROX API key authenticates successfully on `/v1/account`
-- invalid/non-VEROX credential is rejected by API-key authentication
-- checkout creation returns one `cs_*` Checkout Session and one `pay_*` Payment with `OPEN` / `PENDING`
-- repeated request with identical `Idempotency-Key` and payload returns the exact same Checkout Session and Payment IDs
-- changed payload with the same `Idempotency-Key` returns HTTP `409 Conflict`
-
-### Validated checkout sample
-
-- external reference: `ORDER-82921`
-- amount: `1500.00 MZN`
-- checkout status: `OPEN`
-- payment status: `PENDING`
-- checkout URL generated on local Hosted Checkout base URL
-
-### Security hygiene
-
-- one-time bootstrap must remain disabled after merchant/API-key provisioning
-- the generated default Spring Security development password is not a VEROX API credential and must not be used by merchant integrations
-
-## Phase 2 — Backend Completion / Evidence Infrastructure
+## Phase 2 — Evidence Infrastructure / VEROX Bridge
 
 ### VX-EVIDENCE-01 — DONE / LOCAL RUNTIME VALIDATED
 
 Implemented and validated:
 
-- VEROX runtime component/layer naming boundaries documented
 - Flyway V3 `evidences` schema
-- non-enumerable `ev_*` Evidence IDs
-- evidence origin model: `CUSTOMER`, `PROVIDER`
-- evidence kind model: `IMAGE`, `SMS`, `PDF`, `TEXT`, `JSON`
-- ingestion source model: `HOSTED_CHECKOUT`, `VEROX_BRIDGE`, `PROVIDER_API`, `INTERNAL`
-- SHA-256 evidence content hashing
-- customer evidence can be linked directly to a Payment
-- provider evidence can be persisted unlinked before matching, so provider SMS may arrive before customer proof
-- unlinked provider evidence query support
-- duplicate provider evidence protection by merchant/content hash
-- duplicate customer evidence protection by payment/content hash
-- Evidence service separates provider/Bridge ingestion from customer/Hosted Checkout ingestion
-- Verification Engine can later link provider evidence to a Payment without changing evidence content
-- 11 local tests passed with 0 failures and 0 errors before Bridge implementation
-- Flyway V3 applied successfully in local PostgreSQL
-- `evidences` table exists in local PostgreSQL
-- `flyway_schema_history` records version `3` / `evidence infrastructure` with `success = true`
+- non-enumerable `ev_*` IDs
+- `CUSTOMER` / `PROVIDER` evidence origins
+- `IMAGE`, `SMS`, `PDF`, `TEXT`, `JSON` evidence kinds
+- `HOSTED_CHECKOUT`, `VEROX_BRIDGE`, `PROVIDER_API`, `INTERNAL` ingest sources
+- SHA-256 evidence hashing
+- immutable raw evidence semantics
+- provider evidence can arrive unlinked before matching
+- customer evidence can be linked directly to Payment
+- evidence deduplication support
 
-### VX-BRIDGE-01 — FUNCTIONAL RUNTIME VALIDATED / FINAL ISOLATION CHECK PENDING
+### VX-BRIDGE-01 — FUNCTIONAL RUNTIME VALIDATED
+
+Implemented and validated:
+
+- Flyway V4 `bridges` + `bridge_credentials`
+- non-enumerable `brg_*` IDs
+- dedicated `vx_bridge_*` credential namespace
+- SHA-256 bridge credential storage
+- `ROLE_BRIDGE` separated from `ROLE_MERCHANT`
+- Bridge scoped to Merchant + provider
+- one-time Bridge bootstrap
+- `POST /v1/bridges/{bridgeId}/evidence`
+- raw SMS persists as `Evidence(PROVIDER, SMS, VEROX_BRIDGE)`
+- provider Evidence remains `payment_id = NULL` until Verification Engine matching
+- identical provider SMS replay returns the same `ev_*`
+- database count remained one after replay
+- at least one cross-credential misuse path returned HTTP 401; opposite-direction isolation check remains a small hardening closeout item
+
+### VX-EVIDENCE-02 — CUSTOMER MESSAGE FLOW FUNCTIONAL RUNTIME VALIDATED
 
 Implemented and runtime validated:
 
-- Flyway V4 `bridges` and `bridge_credentials` schema
-- non-enumerable `brg_*` Bridge IDs
-- dedicated `vx_bridge_*` credential namespace
-- bridge credentials are SHA-256 hashed at rest
-- Bridge status and credential status models
-- Bridge is scoped to a Merchant and provider
-- dedicated VEROX Bridge authentication principal and filter
-- Merchant API key filter explicitly excludes Bridge endpoints
-- security roles separate `ROLE_BRIDGE` from `ROLE_MERCHANT`
-- bridge credential cannot be used against another `bridgeId`
-- one-time Bridge bootstrap provisioning for MVP/local setup
-- `POST /v1/bridges/{bridgeId}/evidence`
-- raw Bridge payload is persisted as `Evidence(PROVIDER, SMS, VEROX_BRIDGE)`
-- provider evidence remains unlinked to Payment until Verification Engine matching
-- duplicate provider SMS returns the existing Evidence instead of creating a second immutable evidence record
-- Bridge provisioning/authentication and ingestion/scoping unit tests added
-- complete local test suite passed after Bridge implementation
-- Flyway V4 applied successfully in local PostgreSQL
-- local `brg_*` Bridge and `vx_bridge_*` credential provisioned
-- raw provider SMS posted successfully through Bridge endpoint
-- resulting provider Evidence persisted with `payment_id = NULL`
-- replaying the identical SMS returned the same `ev_*`
-- database count remained exactly one row after replay
-- at least one cross-credential misuse path returned HTTP `401`; the opposite direction remains a final isolation check
+- customer pastes one complete payment confirmation message
+- no manual transaction fields
+- `POST /public/v1/checkout/{checkoutSessionId}/evidence/message`
+- request body contains only `content`
+- server assigns receipt timestamp
+- Checkout Session must be `OPEN` and unexpired
+- customer message persists as `Evidence(CUSTOMER, SMS, HOSTED_CHECKOUT)`
+- customer Evidence is linked directly to the Checkout Session Payment
+- provider recorded as `MPESA` for the MVP
+- endpoint response returned `ev_*`, `cs_*`, `pay_*`, `CUSTOMER`, `SMS`, `HOSTED_CHECKOUT`, `MPESA`
+- duplicate identical customer-message replay/database-count validation remains a closeout hardening check
 
-### VX-EVIDENCE-02 — CUSTOMER MESSAGE INGESTION IMPLEMENTED / LOCAL VALIDATION PENDING
+## Phase 3 — VEROX Verification Engine
+
+### VX-VERIFY-01 — M-PESA MESSAGE PARSER IMPLEMENTED / LOCAL VALIDATION PENDING
 
 Implemented:
 
-- customer provides one complete pasted payment confirmation message, with no manual transaction fields
-- `POST /public/v1/checkout/{checkoutSessionId}/evidence/message`
-- request body contains only `content`
-- server assigns the receipt timestamp; customer does not submit authoritative timing metadata
-- checkout session must exist, be `OPEN` and not be expired
-- customer message persists as `Evidence(CUSTOMER, SMS, HOSTED_CHECKOUT)`
-- customer Evidence is linked directly to the Checkout Session Payment
-- MVP provider is recorded as `MPESA`
-- content is SHA-256 hashed and duplicate identical customer messages for the same Payment reuse the existing Evidence
-- endpoint returns evidence/payment/session metadata without echoing the raw message
-- customer-message ingestion unit tests added
+- normalized `ParsedMpesaMessage` model
+- parser keeps CUSTOMER and PROVIDER message rules separate
+- CUSTOMER sample format: `Confirmado <reference>. Transferiste <amount>MT ...`
+- PROVIDER sample format: `<reference> Confirmed.You have received <amount>MT ...`
+- transaction reference normalized to uppercase
+- amount normalized to MZN minor units
+- parser only marks a message match-ready when recognized reference + amount are present
+- unknown/unrecognized text does not become match-ready
+- current parser intentionally supports only validated MVP patterns; broader provider-format support requires real samples
+- parser never changes Payment status and never confirms a payment
+- unit tests cover CUSTOMER parsing, PROVIDER parsing, cross-source normalization, unknown text and source-shape separation
 
 Validation gate:
 
-1. pull latest `main` and run full local test suite
-2. restart VEROX Server with both bootstraps disabled
-3. submit a pasted M-Pesa customer confirmation message against an active `cs_*`
-4. confirm response returns one `ev_*` with `origin=CUSTOMER`, `kind=SMS`, `ingest_source=HOSTED_CHECKOUT`
-5. confirm the Evidence row is linked to the expected `payment_id`
-6. replay the identical customer message and confirm no duplicate Evidence row is created
+1. pull latest `main`
+2. run full local test suite
+3. confirm parser tests pass with zero failures/errors
 
-### Remaining Phase 2 tasks
+### VX-VERIFY-02 — NEXT
 
-1. finish the opposite Bridge/Merchant credential-isolation runtime check
-2. public Checkout Session read model required by the later Hosted Checkout frontend
-3. optional durable object-storage abstraction for supplementary uploaded images
-4. optional customer image-upload endpoint with file type/size validation
-5. evidence audit/replay hardening under concurrent ingestion
+Planned:
 
-## Phase 3 — Verification Engine
+1. read CUSTOMER Evidence linked to a Payment
+2. parse CUSTOMER message
+3. scan unlinked PROVIDER evidence for the same Merchant/provider
+4. parse PROVIDER messages
+5. require exact transaction-reference match for the MVP when reference is available on both sides
+6. require exact amount/currency match
+7. reject ambiguous or multiple candidates as `REVIEW_REQUIRED`
+8. link exactly one provider Evidence to Payment only after safe match
+9. add controlled Payment transitions `PENDING → VERIFYING → CONFIRMED/REVIEW_REQUIRED/FAILED`
+10. prevent one provider transaction/evidence from confirming multiple Payments
 
-Planned tasks:
+### Verification safety rule — LOCKED
 
-1. M-Pesa CUSTOMER confirmation-message parser
-2. M-Pesa PROVIDER receiving-message parser
-3. normalized evidence fields shared across both sources
-4. matching engine using transaction reference, amount, provider, timestamp and identity signals
-5. payment state machine: `PENDING`, `VERIFYING`, `CONFIRMED`, `REVIEW_REQUIRED`, `FAILED`, `EXPIRED`
-6. false-positive-safe matching thresholds
-7. transaction reference reuse protection
-8. verification tests using paired M-Pesa samples
-9. optional OCR adapter for supplementary customer image evidence; OCR output never confirms a payment by itself
+False positive is worse than false negative.
+
+VEROX must never guess a payment match. Missing, malformed, conflicting or ambiguous evidence goes to `REVIEW_REQUIRED` or remains pending; it does not become `CONFIRMED`.
+
+OCR output is never sufficient by itself to confirm a payment.
 
 ## Phase 4 — Webhooks / Merchant Return
 
-Planned tasks:
+Planned:
 
-1. merchant webhook configuration
-2. HMAC signing
-3. `payment.confirmed` and related event contracts
-4. delivery persistence
-5. retry/backoff
-6. webhook idempotency and duplicate handling
-7. merchant integration validation
+- merchant webhook configuration
+- HMAC signing
+- `payment.confirmed` and related event contracts
+- persistent delivery attempts
+- retry/backoff
+- webhook idempotency
+- merchant integration validation
 
 ## Phase 5 — Backend Hardening / Railway Deployment
 
-Planned tasks:
+Planned:
 
-1. remove/default-disable Spring Security development credential behavior
-2. production secret configuration
-3. rate limiting for public/bridge endpoints
-4. audit/security logging
-5. evidence retention and access-control rules
-6. Railway PostgreSQL configuration
-7. durable evidence object storage configuration when supplementary uploads are enabled
-8. Railway `PORT`/healthcheck configuration
-9. deploy backend to Railway staging
-10. run production-like end-to-end API/verification tests
+- remove/default-disable Spring Security development credential behavior
+- production secrets
+- rate limiting
+- audit/security logging
+- evidence retention/access rules
+- Railway PostgreSQL
+- optional durable object storage for supplementary uploads
+- Railway `PORT` + healthcheck
+- staging deployment
+- production-like end-to-end validation
 
 ## Phase 6 — Hosted Checkout Frontend
 
-Planned tasks:
+Planned:
 
-1. bootstrap `frontend/checkout` with TypeScript / TSX
-2. render payment summary and M-Pesa instructions
-3. one-field customer flow to paste the complete M-Pesa confirmation message
-4. optional supplementary evidence upload UX
-5. verifying/success/failure states
-6. success/cancel redirect UX
-7. deploy Hosted Checkout
+- TypeScript/TSX checkout
+- payment summary + M-Pesa instructions
+- one-field pasted-message flow
+- optional supplementary image upload
+- verifying/success/failure states
+- success/cancel redirect UX
+- deployment
 
 ## MVP backend Definition of Done
 
-The backend is not considered complete until:
+The backend is not complete until:
 
 1. merchant creates a Checkout Session
-2. customer can paste the complete payment confirmation message and VEROX persists it as Customer Evidence
-3. official M-Pesa receiving SMS can be ingested through the VEROX Bridge endpoint
-4. provider evidence can safely arrive before or after customer evidence
-5. VEROX parses both customer and provider messages
-6. VEROX compares and evaluates the two independently sourced messages
-7. ambiguous evidence becomes `REVIEW_REQUIRED`, never guessed as confirmed
+2. customer pastes the complete confirmation message and VEROX persists Customer Evidence
+3. official receiving SMS enters through VEROX Bridge
+4. either evidence may arrive first
+5. VEROX parses both independently sourced messages
+6. VEROX safely matches the correct evidence pair
+7. ambiguity never becomes a guessed confirmation
 8. matched evidence transitions Payment to `CONFIRMED`
-9. duplicate/replayed evidence cannot confirm multiple payments
-10. VEROX emits an HMAC-signed merchant webhook
-11. failed webhook deliveries are retried safely
-12. the flow runs on Railway with PostgreSQL
-13. no OCR result is sufficient by itself to confirm a payment
+9. duplicate/replayed evidence cannot confirm multiple Payments
+10. VEROX emits HMAC-signed merchant webhook events
+11. failed webhook delivery retries safely
+12. flow runs on Railway with PostgreSQL
+13. OCR alone can never confirm a payment
 14. no manual database intervention is required
 
 ## Scope rule
