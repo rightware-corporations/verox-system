@@ -95,57 +95,56 @@ public class VerificationOrchestrator {
             return result(payment, VerificationRunStatus.WAITING_CUSTOMER, "CUSTOMER_EVIDENCE_NOT_AVAILABLE", null, null);
         }
 
-        Map<String, CustomerCandidate> distinctCustomers = new LinkedHashMap<>();
+        Map<String, CustomerCandidate> matchReadyCustomers = new LinkedHashMap<>();
         for (Evidence evidence : customerEvidence) {
             ParsedMpesaMessage parsed = messageParser.parse(EvidenceOrigin.CUSTOMER, evidence.getRawContent());
-            if (!parsed.isMatchReady()) {
+            if (!isExpectedCustomerCandidate(payment, parsed)) {
                 continue;
             }
             String key = parsed.transactionReference().toUpperCase(Locale.ROOT)
                 + "|" + parsed.amountMinor()
                 + "|" + parsed.currency().toUpperCase(Locale.ROOT);
-            distinctCustomers.putIfAbsent(key, new CustomerCandidate(evidence, parsed));
+            matchReadyCustomers.putIfAbsent(key, new CustomerCandidate(evidence, parsed));
         }
 
-        if (distinctCustomers.isEmpty()) {
-            payment.requireReview();
-            paymentRepository.save(payment);
-            return result(payment, VerificationRunStatus.REVIEW_REQUIRED, "CUSTOMER_MESSAGE_UNRECOGNIZED", null, null);
+        if (matchReadyCustomers.isEmpty()) {
+            return result(
+                payment,
+                VerificationRunStatus.WAITING_CUSTOMER,
+                "CUSTOMER_EVIDENCE_NOT_MATCH_READY",
+                null,
+                null
+            );
         }
 
-        if (distinctCustomers.size() > 1) {
-            payment.requireReview();
-            paymentRepository.save(payment);
-            return result(payment, VerificationRunStatus.REVIEW_REQUIRED, "CUSTOMER_EVIDENCE_AMBIGUOUS", null, null);
+        Map<String, CustomerCandidate> unusedCustomers = new LinkedHashMap<>();
+        for (Map.Entry<String, CustomerCandidate> entry : matchReadyCustomers.entrySet()) {
+            String transactionReference = entry.getValue().parsed().transactionReference().toUpperCase(Locale.ROOT);
+            boolean alreadyUsed = paymentRepository
+                .existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
+                    payment.getMerchant().getId(),
+                    MVP_PROVIDER,
+                    transactionReference,
+                    payment.getId()
+                );
+            if (!alreadyUsed) {
+                unusedCustomers.put(entry.getKey(), entry.getValue());
+            }
         }
 
-        CustomerCandidate customer = distinctCustomers.values().iterator().next();
-        if (customer.parsed().amountMinor() != payment.getAmountMinor()) {
-            payment.requireReview();
-            paymentRepository.save(payment);
-            return result(payment, VerificationRunStatus.REVIEW_REQUIRED, "CUSTOMER_PAYMENT_AMOUNT_MISMATCH", null, customer.parsed().transactionReference());
-        }
-        if (!customer.parsed().currency().equalsIgnoreCase(payment.getCurrency())) {
-            payment.requireReview();
-            paymentRepository.save(payment);
-            return result(payment, VerificationRunStatus.REVIEW_REQUIRED, "CUSTOMER_PAYMENT_CURRENCY_MISMATCH", null, customer.parsed().transactionReference());
-        }
-
-        String transactionReference = customer.parsed().transactionReference().toUpperCase(Locale.ROOT);
-        if (paymentRepository.existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
-            payment.getMerchant().getId(),
-            MVP_PROVIDER,
-            transactionReference,
-            payment.getId()
-        )) {
-            payment.requireReview();
-            paymentRepository.save(payment);
-            return result(payment, VerificationRunStatus.REVIEW_REQUIRED, "TRANSACTION_REFERENCE_ALREADY_USED", null, transactionReference);
+        if (unusedCustomers.isEmpty()) {
+            return result(
+                payment,
+                VerificationRunStatus.WAITING_CUSTOMER,
+                "CUSTOMER_TRANSACTION_REFERENCE_ALREADY_USED",
+                null,
+                null
+            );
         }
 
         payment.beginVerification();
 
-        List<ProviderCandidate> sameReferenceProviders = evidenceRepository
+        List<ProviderCandidate> providerCandidates = evidenceRepository
             .findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
                 payment.getMerchant().getId(),
                 EvidenceOrigin.PROVIDER
@@ -157,40 +156,92 @@ public class VerificationOrchestrator {
                 messageParser.parse(EvidenceOrigin.PROVIDER, evidence.getRawContent())
             ))
             .filter(candidate -> candidate.parsed().isMatchReady())
-            .filter(candidate -> candidate.parsed().transactionReference().equalsIgnoreCase(transactionReference))
             .toList();
 
-        if (sameReferenceProviders.isEmpty()) {
-            return result(payment, VerificationRunStatus.WAITING_PROVIDER, "MATCHING_PROVIDER_EVIDENCE_NOT_AVAILABLE", null, transactionReference);
+        List<MatchedPair> matchedPairs = new ArrayList<>();
+        ProviderConflict providerConflict = null;
+
+        for (CustomerCandidate customer : unusedCustomers.values()) {
+            String transactionReference = customer.parsed().transactionReference().toUpperCase(Locale.ROOT);
+            List<ProviderCandidate> sameReferenceProviders = providerCandidates.stream()
+                .filter(candidate -> candidate.parsed().transactionReference().equalsIgnoreCase(transactionReference))
+                .toList();
+
+            if (sameReferenceProviders.isEmpty()) {
+                continue;
+            }
+
+            if (sameReferenceProviders.size() > 1) {
+                if (providerConflict == null) {
+                    providerConflict = new ProviderConflict(
+                        "PROVIDER_EVIDENCE_AMBIGUOUS",
+                        null,
+                        transactionReference
+                    );
+                }
+                continue;
+            }
+
+            ProviderCandidate provider = sameReferenceProviders.getFirst();
+            VerificationMatchResult match = evidenceMatcher.match(
+                customer.parsed(),
+                provider.parsed(),
+                payment.getAmountMinor(),
+                payment.getCurrency()
+            );
+
+            if (match.isMatch()) {
+                matchedPairs.add(new MatchedPair(customer, provider, match));
+                continue;
+            }
+
+            if (providerConflict == null) {
+                providerConflict = new ProviderConflict(
+                    match.reason(),
+                    provider.evidence().getPublicId(),
+                    transactionReference
+                );
+            }
         }
 
-        if (sameReferenceProviders.size() > 1) {
-            payment.requireReview();
-            paymentRepository.save(payment);
-            return result(payment, VerificationRunStatus.REVIEW_REQUIRED, "PROVIDER_EVIDENCE_AMBIGUOUS", null, transactionReference);
+        if (matchedPairs.isEmpty()) {
+            if (providerConflict != null) {
+                payment.requireReview();
+                paymentRepository.save(payment);
+                return result(
+                    payment,
+                    VerificationRunStatus.REVIEW_REQUIRED,
+                    providerConflict.reason(),
+                    providerConflict.providerEvidenceId(),
+                    providerConflict.transactionReference()
+                );
+            }
+
+            return result(
+                payment,
+                VerificationRunStatus.WAITING_PROVIDER,
+                "MATCHING_PROVIDER_EVIDENCE_NOT_AVAILABLE",
+                null,
+                null
+            );
         }
 
-        ProviderCandidate provider = sameReferenceProviders.getFirst();
-        VerificationMatchResult match = evidenceMatcher.match(
-            customer.parsed(),
-            provider.parsed(),
-            payment.getAmountMinor(),
-            payment.getCurrency()
-        );
-
-        if (!match.isMatch()) {
+        if (matchedPairs.size() > 1) {
             payment.requireReview();
             paymentRepository.save(payment);
             return result(
                 payment,
                 VerificationRunStatus.REVIEW_REQUIRED,
-                match.reason(),
-                provider.evidence().getPublicId(),
-                transactionReference
+                "MULTIPLE_MATCHED_EVIDENCE_PAIRS",
+                null,
+                null
             );
         }
 
-        evidenceService.linkProviderEvidence(provider.evidence(), payment);
+        MatchedPair selected = matchedPairs.getFirst();
+        String transactionReference = selected.customer().parsed().transactionReference().toUpperCase(Locale.ROOT);
+
+        evidenceService.linkProviderEvidence(selected.provider().evidence(), payment);
         Instant confirmedAt = Instant.now();
         payment.confirm(MVP_PROVIDER, transactionReference, confirmedAt);
         payment.getCheckoutSession().complete(confirmedAt);
@@ -211,10 +262,16 @@ public class VerificationOrchestrator {
         return result(
             payment,
             VerificationRunStatus.CONFIRMED,
-            match.reason(),
-            provider.evidence().getPublicId(),
+            selected.match().reason(),
+            selected.provider().evidence().getPublicId(),
             transactionReference
         );
+    }
+
+    private boolean isExpectedCustomerCandidate(Payment payment, ParsedMpesaMessage parsed) {
+        return parsed.isMatchReady()
+            && parsed.amountMinor() == payment.getAmountMinor()
+            && parsed.currency().equalsIgnoreCase(payment.getCurrency());
     }
 
     private boolean isCustomerMpesaMessage(Evidence evidence) {
@@ -253,5 +310,19 @@ public class VerificationOrchestrator {
     }
 
     private record ProviderCandidate(Evidence evidence, ParsedMpesaMessage parsed) {
+    }
+
+    private record MatchedPair(
+        CustomerCandidate customer,
+        ProviderCandidate provider,
+        VerificationMatchResult match
+    ) {
+    }
+
+    private record ProviderConflict(
+        String reason,
+        String providerEvidenceId,
+        String transactionReference
+    ) {
     }
 }
