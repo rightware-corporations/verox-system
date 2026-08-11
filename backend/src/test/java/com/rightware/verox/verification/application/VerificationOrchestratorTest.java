@@ -37,7 +37,8 @@ class VerificationOrchestratorTest {
         Fixture fixture = fixture();
         Evidence customer = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
         Evidence provider = providerEvidence(fixture.merchant(), "DH10L1OJRUS", "1.00", "ev_provider_match");
-        stubActivePayment(fixture, customer);
+        stubPaymentEvidence(fixture, List.of(customer));
+        stubReferenceUsed(fixture, "DH10L1OJRUS", false);
         when(fixture.evidenceRepository().findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
             fixture.merchant().getId(), EvidenceOrigin.PROVIDER
         )).thenReturn(List.of(provider));
@@ -67,7 +68,8 @@ class VerificationOrchestratorTest {
         Fixture fixture = fixture();
         Evidence customer = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
         Evidence unrelatedProvider = providerEvidence(fixture.merchant(), "ZZ99YY88XX77", "1.00", "ev_unrelated");
-        stubActivePayment(fixture, customer);
+        stubPaymentEvidence(fixture, List.of(customer));
+        stubReferenceUsed(fixture, "DH10L1OJRUS", false);
         when(fixture.evidenceRepository().findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
             fixture.merchant().getId(), EvidenceOrigin.PROVIDER
         )).thenReturn(List.of(unrelatedProvider));
@@ -85,7 +87,8 @@ class VerificationOrchestratorTest {
         Fixture fixture = fixture();
         Evidence customer = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
         Evidence provider = providerEvidence(fixture.merchant(), "DH10L1OJRUS", "2.00", "ev_amount_conflict");
-        stubActivePayment(fixture, customer);
+        stubPaymentEvidence(fixture, List.of(customer));
+        stubReferenceUsed(fixture, "DH10L1OJRUS", false);
         when(fixture.evidenceRepository().findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
             fixture.merchant().getId(), EvidenceOrigin.PROVIDER
         )).thenReturn(List.of(provider));
@@ -96,6 +99,7 @@ class VerificationOrchestratorTest {
         assertThat(result.reason()).isEqualTo("EVIDENCE_AMOUNT_MISMATCH");
         assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.REVIEW_REQUIRED);
         verify(fixture.evidenceService(), never()).linkProviderEvidence(any(), any());
+        verify(fixture.eventPublisher(), never()).publishEvent(any(PaymentConfirmedEvent.class));
     }
 
     @Test
@@ -104,7 +108,8 @@ class VerificationOrchestratorTest {
         Evidence customer = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
         Evidence providerOne = providerEvidence(fixture.merchant(), "DH10L1OJRUS", "1.00", "ev_provider_one");
         Evidence providerTwo = providerEvidence(fixture.merchant(), "DH10L1OJRUS", "1.00", "ev_provider_two");
-        stubActivePayment(fixture, customer);
+        stubPaymentEvidence(fixture, List.of(customer));
+        stubReferenceUsed(fixture, "DH10L1OJRUS", false);
         when(fixture.evidenceRepository().findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
             fixture.merchant().getId(), EvidenceOrigin.PROVIDER
         )).thenReturn(List.of(providerOne, providerTwo));
@@ -114,45 +119,115 @@ class VerificationOrchestratorTest {
         assertThat(result.status()).isEqualTo(VerificationRunStatus.REVIEW_REQUIRED);
         assertThat(result.reason()).isEqualTo("PROVIDER_EVIDENCE_AMBIGUOUS");
         assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.REVIEW_REQUIRED);
+        verify(fixture.eventPublisher(), never()).publishEvent(any(PaymentConfirmedEvent.class));
     }
 
     @Test
-    void reusedProviderTransactionReferenceCannotConfirmAnotherPayment() {
+    void reusedCustomerReferenceCannotPoisonPaymentOrConfirmAgain() {
         Fixture fixture = fixture();
         Evidence customer = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
-        when(fixture.paymentRepository().findById(fixture.payment().getId())).thenReturn(Optional.of(fixture.payment()));
-        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId())).thenReturn(List.of(customer));
-        when(fixture.paymentRepository().existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
-            fixture.merchant().getId(), "MPESA", "DH10L1OJRUS", fixture.payment().getId()
-        )).thenReturn(true);
+        stubPaymentEvidence(fixture, List.of(customer));
+        stubReferenceUsed(fixture, "DH10L1OJRUS", true);
 
         VerificationRunResult result = fixture.orchestrator().verifyPayment(fixture.payment().getId());
 
-        assertThat(result.status()).isEqualTo(VerificationRunStatus.REVIEW_REQUIRED);
-        assertThat(result.reason()).isEqualTo("TRANSACTION_REFERENCE_ALREADY_USED");
-        assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.REVIEW_REQUIRED);
+        assertThat(result.status()).isEqualTo(VerificationRunStatus.WAITING_CUSTOMER);
+        assertThat(result.reason()).isEqualTo("CUSTOMER_TRANSACTION_REFERENCE_ALREADY_USED");
+        assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(fixture.evidenceRepository(), never())
+            .findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(any(), any());
+        verify(fixture.evidenceService(), never()).linkProviderEvidence(any(), any());
+        verify(fixture.eventPublisher(), never()).publishEvent(any(PaymentConfirmedEvent.class));
     }
 
     @Test
-    void conflictingCustomerMessagesAreAmbiguous() {
+    void unrelatedCustomerClaimDoesNotPoisonUniqueRealPair() {
         Fixture fixture = fixture();
-        Evidence first = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
-        Evidence second = customerEvidence(fixture.merchant(), fixture.payment(), "AB12CD34EF56", "1.00");
-        when(fixture.paymentRepository().findById(fixture.payment().getId())).thenReturn(Optional.of(fixture.payment()));
-        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId())).thenReturn(List.of(first, second));
+        Evidence legitimate = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
+        Evidence unrelated = customerEvidence(fixture.merchant(), fixture.payment(), "AB12CD34EF56", "1.00");
+        Evidence provider = providerEvidence(fixture.merchant(), "DH10L1OJRUS", "1.00", "ev_provider_match");
+        stubPaymentEvidence(fixture, List.of(unrelated, legitimate));
+        stubReferenceUsed(fixture, "DH10L1OJRUS", false);
+        stubReferenceUsed(fixture, "AB12CD34EF56", false);
+        when(fixture.evidenceRepository().findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
+            fixture.merchant().getId(), EvidenceOrigin.PROVIDER
+        )).thenReturn(List.of(provider));
+
+        VerificationRunResult result = fixture.orchestrator().verifyPayment(fixture.payment().getId());
+
+        assertThat(result.status()).isEqualTo(VerificationRunStatus.CONFIRMED);
+        assertThat(result.transactionReference()).isEqualTo("DH10L1OJRUS");
+        assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.CONFIRMED);
+        verify(fixture.evidenceService()).linkProviderEvidence(provider, fixture.payment());
+    }
+
+    @Test
+    void multipleRealEvidencePairsStillFailClosedToReview() {
+        Fixture fixture = fixture();
+        Evidence customerOne = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "1.00");
+        Evidence customerTwo = customerEvidence(fixture.merchant(), fixture.payment(), "AB12CD34EF56", "1.00");
+        Evidence providerOne = providerEvidence(fixture.merchant(), "DH10L1OJRUS", "1.00", "ev_provider_one");
+        Evidence providerTwo = providerEvidence(fixture.merchant(), "AB12CD34EF56", "1.00", "ev_provider_two");
+        stubPaymentEvidence(fixture, List.of(customerOne, customerTwo));
+        stubReferenceUsed(fixture, "DH10L1OJRUS", false);
+        stubReferenceUsed(fixture, "AB12CD34EF56", false);
+        when(fixture.evidenceRepository().findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
+            fixture.merchant().getId(), EvidenceOrigin.PROVIDER
+        )).thenReturn(List.of(providerOne, providerTwo));
 
         VerificationRunResult result = fixture.orchestrator().verifyPayment(fixture.payment().getId());
 
         assertThat(result.status()).isEqualTo(VerificationRunStatus.REVIEW_REQUIRED);
-        assertThat(result.reason()).isEqualTo("CUSTOMER_EVIDENCE_AMBIGUOUS");
+        assertThat(result.reason()).isEqualTo("MULTIPLE_MATCHED_EVIDENCE_PAIRS");
+        assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.REVIEW_REQUIRED);
+        verify(fixture.evidenceService(), never()).linkProviderEvidence(any(), any());
+        verify(fixture.eventPublisher(), never()).publishEvent(any(PaymentConfirmedEvent.class));
     }
 
-    private void stubActivePayment(Fixture fixture, Evidence customer) {
+    @Test
+    void unrecognizedCustomerEvidenceDoesNotForceReview() {
+        Fixture fixture = fixture();
+        Evidence garbage = rawCustomerEvidence(
+            fixture.merchant(),
+            fixture.payment(),
+            "ev_customer_garbage",
+            "This is not a recognized payment confirmation message."
+        );
+        stubPaymentEvidence(fixture, List.of(garbage));
+
+        VerificationRunResult result = fixture.orchestrator().verifyPayment(fixture.payment().getId());
+
+        assertThat(result.status()).isEqualTo(VerificationRunStatus.WAITING_CUSTOMER);
+        assertThat(result.reason()).isEqualTo("CUSTOMER_EVIDENCE_NOT_MATCH_READY");
+        assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(fixture.evidenceService(), never()).linkProviderEvidence(any(), any());
+        verify(fixture.eventPublisher(), never()).publishEvent(any(PaymentConfirmedEvent.class));
+    }
+
+    @Test
+    void wrongAmountCustomerEvidenceDoesNotForceReview() {
+        Fixture fixture = fixture();
+        Evidence wrongAmount = customerEvidence(fixture.merchant(), fixture.payment(), "DH10L1OJRUS", "2.00");
+        stubPaymentEvidence(fixture, List.of(wrongAmount));
+
+        VerificationRunResult result = fixture.orchestrator().verifyPayment(fixture.payment().getId());
+
+        assertThat(result.status()).isEqualTo(VerificationRunStatus.WAITING_CUSTOMER);
+        assertThat(result.reason()).isEqualTo("CUSTOMER_EVIDENCE_NOT_MATCH_READY");
+        assertThat(fixture.payment().getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verify(fixture.evidenceService(), never()).linkProviderEvidence(any(), any());
+        verify(fixture.eventPublisher(), never()).publishEvent(any(PaymentConfirmedEvent.class));
+    }
+
+    private void stubPaymentEvidence(Fixture fixture, List<Evidence> evidence) {
         when(fixture.paymentRepository().findById(fixture.payment().getId())).thenReturn(Optional.of(fixture.payment()));
-        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId())).thenReturn(List.of(customer));
+        when(fixture.evidenceRepository().findAllByPaymentIdOrderByReceivedAtAsc(fixture.payment().getId())).thenReturn(evidence);
+    }
+
+    private void stubReferenceUsed(Fixture fixture, String reference, boolean used) {
         when(fixture.paymentRepository().existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
-            fixture.merchant().getId(), "MPESA", "DH10L1OJRUS", fixture.payment().getId()
-        )).thenReturn(false);
+            fixture.merchant().getId(), "MPESA", reference, fixture.payment().getId()
+        )).thenReturn(used);
     }
 
     private Fixture fixture() {
@@ -181,10 +256,24 @@ class VerificationOrchestratorTest {
     }
 
     private Evidence customerEvidence(Merchant merchant, Payment payment, String reference, String amount) {
+        return rawCustomerEvidence(
+            merchant,
+            payment,
+            "ev_customer_" + reference,
+            "Confirmado " + reference + ". Transferiste " + amount + "MT via M-Pesa."
+        );
+    }
+
+    private Evidence rawCustomerEvidence(
+        Merchant merchant,
+        Payment payment,
+        String publicId,
+        String rawContent
+    ) {
         return new Evidence(
-            "ev_customer_" + reference, merchant, payment, EvidenceOrigin.CUSTOMER, EvidenceKind.SMS,
-            EvidenceIngestSource.HOSTED_CHECKOUT, "MPESA", hash(reference + amount + "customer"), "text/plain",
-            null, null, "Confirmado " + reference + ". Transferiste " + amount + "MT via M-Pesa.", null, Instant.now()
+            publicId, merchant, payment, EvidenceOrigin.CUSTOMER, EvidenceKind.SMS,
+            EvidenceIngestSource.HOSTED_CHECKOUT, "MPESA", hash(publicId + rawContent), "text/plain",
+            null, null, rawContent, null, Instant.now()
         );
     }
 
