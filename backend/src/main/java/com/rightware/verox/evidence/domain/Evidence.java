@@ -1,5 +1,6 @@
 package com.rightware.verox.evidence.domain;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.payment.domain.Payment;
 import jakarta.persistence.Column;
@@ -34,6 +35,10 @@ public class Evidence {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "payment_id")
     private Payment payment;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private ApiKeyEnvironment environment;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
@@ -84,6 +89,7 @@ public class Evidence {
         String publicId,
         Merchant merchant,
         Payment payment,
+        ApiKeyEnvironment environment,
         EvidenceOrigin origin,
         EvidenceKind kind,
         EvidenceIngestSource ingestSource,
@@ -100,6 +106,7 @@ public class Evidence {
         this.publicId = requireText(publicId, "publicId");
         this.merchant = Objects.requireNonNull(merchant, "merchant");
         this.payment = payment;
+        this.environment = Objects.requireNonNull(environment, "environment");
         this.origin = Objects.requireNonNull(origin, "origin");
         this.kind = Objects.requireNonNull(kind, "kind");
         this.ingestSource = Objects.requireNonNull(ingestSource, "ingestSource");
@@ -115,7 +122,7 @@ public class Evidence {
         if (this.storageKey == null && this.rawContent == null) {
             throw new IllegalArgumentException("Evidence requires storageKey or rawContent");
         }
-        validatePaymentMerchant(payment);
+        validatePaymentMerchantAndEnvironment(payment);
     }
 
     @PrePersist
@@ -137,7 +144,7 @@ public class Evidence {
 
     public void linkToPayment(Payment payment) {
         Objects.requireNonNull(payment, "payment");
-        validatePaymentMerchant(payment);
+        validatePaymentMerchantAndEnvironment(payment);
         if (this.payment != null && !this.payment.getId().equals(payment.getId())) {
             throw new IllegalStateException("Evidence is already linked to another Payment");
         }
@@ -147,7 +154,7 @@ public class Evidence {
         }
     }
 
-    private void validatePaymentMerchant(Payment payment) {
+    private void validatePaymentMerchantAndEnvironment(Payment payment) {
         if (payment == null) {
             return;
         }
@@ -155,6 +162,9 @@ public class Evidence {
         if (paymentMerchant == null || paymentMerchant.getId() == null || merchant.getId() == null
             || !merchant.getId().equals(paymentMerchant.getId())) {
             throw new IllegalArgumentException("Evidence and Payment must belong to the same Merchant");
+        }
+        if (payment.getEnvironment() != environment) {
+            throw new IllegalArgumentException("Evidence and Payment must belong to the same environment");
         }
     }
 
@@ -196,6 +206,10 @@ public class Evidence {
 
     public Payment getPayment() {
         return payment;
+    }
+
+    public ApiKeyEnvironment getEnvironment() {
+        return environment;
     }
 
     public EvidenceOrigin getOrigin() {
