@@ -27,6 +27,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -238,8 +239,8 @@ class VerificationOrchestratorTest {
     void merchantVerificationScopesActivePaymentsToBridgeEnvironment() {
         Fixture fixture = fixture();
         when(fixture.paymentRepository().findAllByMerchantIdAndEnvironmentAndStatusInOrderByCreatedAtAsc(
-            fixture.merchant().getId(),
-            ApiKeyEnvironment.LIVE,
+            eq(fixture.merchant().getId()),
+            eq(ApiKeyEnvironment.LIVE),
             anyCollection()
         )).thenReturn(List.of());
 
@@ -250,8 +251,8 @@ class VerificationOrchestratorTest {
 
         assertThat(results).isEmpty();
         verify(fixture.paymentRepository()).findAllByMerchantIdAndEnvironmentAndStatusInOrderByCreatedAtAsc(
-            fixture.merchant().getId(),
-            ApiKeyEnvironment.LIVE,
+            eq(fixture.merchant().getId()),
+            eq(ApiKeyEnvironment.LIVE),
             anyCollection()
         );
     }
