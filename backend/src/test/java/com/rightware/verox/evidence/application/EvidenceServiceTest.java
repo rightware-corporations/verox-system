@@ -1,5 +1,6 @@
 package com.rightware.verox.evidence.application;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.common.id.ResourceIdGenerator;
 import com.rightware.verox.evidence.domain.Evidence;
 import com.rightware.verox.evidence.domain.EvidenceIngestSource;
@@ -24,7 +25,7 @@ import static org.mockito.Mockito.when;
 class EvidenceServiceTest {
 
     @Test
-    void registersUnlinkedRawProviderEvidenceFromVeroxBridge() {
+    void registersUnlinkedRawProviderEvidenceFromVeroxBridgeInExplicitEnvironment() {
         EvidenceRepository repository = mock(EvidenceRepository.class);
         ResourceIdGenerator ids = mock(ResourceIdGenerator.class);
         EvidenceContentHasher hasher = new EvidenceContentHasher();
@@ -32,8 +33,9 @@ class EvidenceServiceTest {
         String hash = hasher.sha256("M-Pesa official SMS");
 
         when(ids.generate("ev")).thenReturn("ev_test123");
-        when(repository.findByMerchantIdAndOriginAndKindAndContentSha256(
+        when(repository.findByMerchantIdAndEnvironmentAndOriginAndKindAndContentSha256(
             merchant.getId(),
+            ApiKeyEnvironment.LIVE,
             EvidenceOrigin.PROVIDER,
             EvidenceKind.SMS,
             hash
@@ -43,6 +45,7 @@ class EvidenceServiceTest {
         EvidenceService service = new EvidenceService(repository, hasher, ids);
         Evidence evidence = service.registerProviderRaw(
             merchant,
+            ApiKeyEnvironment.LIVE,
             EvidenceKind.SMS,
             EvidenceIngestSource.VEROX_BRIDGE,
             "MPESA",
@@ -52,6 +55,7 @@ class EvidenceServiceTest {
         );
 
         assertThat(evidence.getPublicId()).isEqualTo("ev_test123");
+        assertThat(evidence.getEnvironment()).isEqualTo(ApiKeyEnvironment.LIVE);
         assertThat(evidence.getOrigin()).isEqualTo(EvidenceOrigin.PROVIDER);
         assertThat(evidence.getKind()).isEqualTo(EvidenceKind.SMS);
         assertThat(evidence.getIngestSource()).isEqualTo(EvidenceIngestSource.VEROX_BRIDGE);
@@ -63,7 +67,7 @@ class EvidenceServiceTest {
     }
 
     @Test
-    void returnsExistingProviderEvidenceForDuplicateBridgeContent() {
+    void returnsExistingProviderEvidenceOnlyInsideSameEnvironment() {
         EvidenceRepository repository = mock(EvidenceRepository.class);
         ResourceIdGenerator ids = mock(ResourceIdGenerator.class);
         EvidenceContentHasher hasher = new EvidenceContentHasher();
@@ -71,8 +75,9 @@ class EvidenceServiceTest {
         Evidence existing = mock(Evidence.class);
         String hash = hasher.sha256("duplicate sms");
 
-        when(repository.findByMerchantIdAndOriginAndKindAndContentSha256(
+        when(repository.findByMerchantIdAndEnvironmentAndOriginAndKindAndContentSha256(
             merchant.getId(),
+            ApiKeyEnvironment.TEST,
             EvidenceOrigin.PROVIDER,
             EvidenceKind.SMS,
             hash
@@ -81,6 +86,7 @@ class EvidenceServiceTest {
         EvidenceService service = new EvidenceService(repository, hasher, ids);
         Evidence result = service.registerProviderRaw(
             merchant,
+            ApiKeyEnvironment.TEST,
             EvidenceKind.SMS,
             EvidenceIngestSource.VEROX_BRIDGE,
             "MPESA",
@@ -95,7 +101,7 @@ class EvidenceServiceTest {
     }
 
     @Test
-    void registersCustomerStoredEvidenceLinkedToPayment() {
+    void registersCustomerStoredEvidenceLinkedToPaymentEnvironment() {
         EvidenceRepository repository = mock(EvidenceRepository.class);
         ResourceIdGenerator ids = mock(ResourceIdGenerator.class);
         EvidenceContentHasher hasher = new EvidenceContentHasher();
@@ -106,6 +112,7 @@ class EvidenceServiceTest {
 
         when(payment.getId()).thenReturn(paymentId);
         when(payment.getMerchant()).thenReturn(merchant);
+        when(payment.getEnvironment()).thenReturn(ApiKeyEnvironment.LIVE);
         when(ids.generate("ev")).thenReturn("ev_customer123");
         when(repository.findByPaymentIdAndOriginAndKindAndContentSha256(
             paymentId,
@@ -130,6 +137,7 @@ class EvidenceServiceTest {
         );
 
         assertThat(evidence.getPublicId()).isEqualTo("ev_customer123");
+        assertThat(evidence.getEnvironment()).isEqualTo(ApiKeyEnvironment.LIVE);
         assertThat(evidence.getOrigin()).isEqualTo(EvidenceOrigin.CUSTOMER);
         assertThat(evidence.getPayment()).isSameAs(payment);
         assertThat(evidence.getStorageKey()).isEqualTo("evidence/customer/proof.jpg");
