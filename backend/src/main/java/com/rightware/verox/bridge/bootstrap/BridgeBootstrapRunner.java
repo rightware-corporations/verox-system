@@ -1,5 +1,6 @@
 package com.rightware.verox.bridge.bootstrap;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.bridge.application.BridgeService;
 import com.rightware.verox.bridge.application.IssuedBridgeCredential;
 import com.rightware.verox.bridge.repository.BridgeRepository;
@@ -24,6 +25,7 @@ public class BridgeBootstrapRunner implements ApplicationRunner {
     private final BridgeRepository bridgeRepository;
     private final BridgeService bridgeService;
     private final String merchantName;
+    private final ApiKeyEnvironment environment;
     private final String bridgeName;
     private final String provider;
 
@@ -32,6 +34,7 @@ public class BridgeBootstrapRunner implements ApplicationRunner {
         BridgeRepository bridgeRepository,
         BridgeService bridgeService,
         @Value("${verox.bridge.bootstrap.merchant-name:VEROX MVP Merchant}") String merchantName,
+        @Value("${verox.bridge.bootstrap.environment:TEST}") ApiKeyEnvironment environment,
         @Value("${verox.bridge.bootstrap.name:M-Pesa Receiving Bridge}") String bridgeName,
         @Value("${verox.bridge.bootstrap.provider:MPESA}") String provider
     ) {
@@ -39,6 +42,7 @@ public class BridgeBootstrapRunner implements ApplicationRunner {
         this.bridgeRepository = bridgeRepository;
         this.bridgeService = bridgeService;
         this.merchantName = merchantName;
+        this.environment = environment;
         this.bridgeName = bridgeName;
         this.provider = provider;
     }
@@ -57,8 +61,8 @@ public class BridgeBootstrapRunner implements ApplicationRunner {
             return;
         }
 
-        IssuedBridgeCredential issued = bridgeService.provision(merchant, bridgeName, provider);
-        log.warn("VEROX Bridge created: {} ({})", bridgeName, issued.bridgePublicId());
+        IssuedBridgeCredential issued = bridgeService.provision(merchant, environment, bridgeName, provider);
+        log.warn("VEROX Bridge created: {} ({}) [{}]", bridgeName, issued.bridgePublicId(), environment);
         log.warn("VEROX Bridge credential — copy and store securely; it will not be shown again: {}", issued.value());
         log.warn("Disable VEROX_BRIDGE_BOOTSTRAP_ENABLED after provisioning the bridge.");
     }
