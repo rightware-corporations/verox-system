@@ -1,5 +1,6 @@
 package com.rightware.verox.verification.application;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.evidence.application.EvidenceIngestedEvent;
 import com.rightware.verox.evidence.domain.EvidenceOrigin;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ class VerificationEvidenceIngestedListenerTest {
         listener.onEvidenceIngested(new EvidenceIngestedEvent(
             merchantId,
             paymentId,
+            ApiKeyEnvironment.TEST,
             EvidenceOrigin.CUSTOMER,
             "ev_customer123"
         ));
@@ -43,21 +45,22 @@ class VerificationEvidenceIngestedListenerTest {
     }
 
     @Test
-    void providerEvidenceTriggersMerchantVerificationBecauseItStartsUnlinked() {
+    void providerEvidenceTriggersOnlyMerchantEnvironmentBecauseItStartsUnlinked() {
         VerificationOrchestrator orchestrator = mock(VerificationOrchestrator.class);
         VerificationEvidenceIngestedListener listener = new VerificationEvidenceIngestedListener(orchestrator);
         UUID merchantId = UUID.randomUUID();
 
-        when(orchestrator.verifyMerchant(merchantId)).thenReturn(List.of());
+        when(orchestrator.verifyMerchant(merchantId, ApiKeyEnvironment.LIVE)).thenReturn(List.of());
 
         listener.onEvidenceIngested(new EvidenceIngestedEvent(
             merchantId,
             null,
+            ApiKeyEnvironment.LIVE,
             EvidenceOrigin.PROVIDER,
             "ev_provider123"
         ));
 
-        verify(orchestrator).verifyMerchant(merchantId);
+        verify(orchestrator).verifyMerchant(merchantId, ApiKeyEnvironment.LIVE);
         verifyNoMoreInteractions(orchestrator);
     }
 
@@ -74,6 +77,7 @@ class VerificationEvidenceIngestedListenerTest {
         assertThatCode(() -> listener.onEvidenceIngested(new EvidenceIngestedEvent(
             merchantId,
             paymentId,
+            ApiKeyEnvironment.TEST,
             EvidenceOrigin.CUSTOMER,
             "ev_customer123"
         ))).doesNotThrowAnyException();
