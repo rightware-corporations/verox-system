@@ -34,6 +34,7 @@ public class CheckoutSessionService {
     private final ResourceIdGenerator resourceIdGenerator;
     private final RedirectUrlValidator redirectUrlValidator;
     private final CheckoutRequestFingerprint fingerprint;
+    private final CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService;
     private final String checkoutBaseUrl;
     private final long sessionTtlMinutes;
 
@@ -45,6 +46,7 @@ public class CheckoutSessionService {
         ResourceIdGenerator resourceIdGenerator,
         RedirectUrlValidator redirectUrlValidator,
         CheckoutRequestFingerprint fingerprint,
+        CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService,
         @Value("${verox.checkout.base-url:http://localhost:3000}") String checkoutBaseUrl,
         @Value("${verox.checkout.session-ttl-minutes:15}") long sessionTtlMinutes
     ) {
@@ -55,6 +57,7 @@ public class CheckoutSessionService {
         this.resourceIdGenerator = resourceIdGenerator;
         this.redirectUrlValidator = redirectUrlValidator;
         this.fingerprint = fingerprint;
+        this.checkoutSubmissionCapabilityService = checkoutSubmissionCapabilityService;
         this.checkoutBaseUrl = stripTrailingSlash(checkoutBaseUrl);
         this.sessionTtlMinutes = sessionTtlMinutes;
     }
@@ -165,6 +168,7 @@ public class CheckoutSessionService {
     }
 
     private CheckoutSessionView toView(CheckoutSession session, Payment payment) {
+        String capability = checkoutSubmissionCapabilityService.issue(session);
         return new CheckoutSessionView(
             session.getPublicId(),
             payment.getPublicId(),
@@ -174,7 +178,7 @@ public class CheckoutSessionService {
             moneyConverter.toMajorString(session.getAmountMinor()),
             session.getCurrency(),
             session.getDescription(),
-            checkoutBaseUrl + "/c/" + session.getPublicId(),
+            checkoutBaseUrl + "/c/" + session.getPublicId() + "#vx_capability=" + capability,
             session.getExpiresAt()
         );
     }
