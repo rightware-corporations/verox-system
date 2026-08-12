@@ -1,5 +1,6 @@
 package com.rightware.verox.evidence.application;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.common.id.ResourceIdGenerator;
 import com.rightware.verox.evidence.domain.Evidence;
 import com.rightware.verox.evidence.domain.EvidenceIngestSource;
@@ -36,6 +37,7 @@ public class EvidenceService {
     @Transactional
     public Evidence registerProviderRaw(
         Merchant merchant,
+        ApiKeyEnvironment environment,
         EvidenceKind kind,
         EvidenceIngestSource ingestSource,
         String provider,
@@ -44,10 +46,12 @@ public class EvidenceService {
         Instant receivedAt
     ) {
         Objects.requireNonNull(merchant, "merchant");
+        Objects.requireNonNull(environment, "environment");
         String contentSha256 = contentHasher.sha256(rawContent);
 
-        return evidenceRepository.findByMerchantIdAndOriginAndKindAndContentSha256(
+        return evidenceRepository.findByMerchantIdAndEnvironmentAndOriginAndKindAndContentSha256(
             merchant.getId(),
+            environment,
             EvidenceOrigin.PROVIDER,
             kind,
             contentSha256
@@ -55,6 +59,7 @@ public class EvidenceService {
             resourceIdGenerator.generate("ev"),
             merchant,
             null,
+            environment,
             EvidenceOrigin.PROVIDER,
             kind,
             ingestSource,
@@ -91,6 +96,7 @@ public class EvidenceService {
             resourceIdGenerator.generate("ev"),
             payment.getMerchant(),
             payment,
+            payment.getEnvironment(),
             EvidenceOrigin.CUSTOMER,
             kind,
             ingestSource,
@@ -130,6 +136,7 @@ public class EvidenceService {
             resourceIdGenerator.generate("ev"),
             payment.getMerchant(),
             payment,
+            payment.getEnvironment(),
             EvidenceOrigin.CUSTOMER,
             kind,
             ingestSource,
