@@ -46,6 +46,7 @@ public class BridgeEvidenceIngestionService {
         Bridge bridge = bridgeRepository.findByIdAndStatus(principal.bridgeId(), BridgeStatus.ACTIVE)
             .filter(candidate -> candidate.getPublicId().equals(principal.bridgePublicId()))
             .filter(candidate -> candidate.getMerchant().getId().equals(principal.merchantId()))
+            .filter(candidate -> candidate.getEnvironment() == principal.environment())
             .orElseThrow(() -> new ApiException(
                 HttpStatus.UNAUTHORIZED,
                 "BRIDGE_UNAVAILABLE",
@@ -55,6 +56,7 @@ public class BridgeEvidenceIngestionService {
         Instant effectiveReceivedAt = receivedAt == null ? Instant.now() : receivedAt;
         Evidence evidence = evidenceService.registerProviderRaw(
             bridge.getMerchant(),
+            bridge.getEnvironment(),
             EvidenceKind.SMS,
             EvidenceIngestSource.VEROX_BRIDGE,
             bridge.getProvider(),
@@ -66,6 +68,7 @@ public class BridgeEvidenceIngestionService {
         eventPublisher.publishEvent(new EvidenceIngestedEvent(
             bridge.getMerchant().getId(),
             null,
+            evidence.getEnvironment(),
             evidence.getOrigin(),
             evidence.getPublicId()
         ));
