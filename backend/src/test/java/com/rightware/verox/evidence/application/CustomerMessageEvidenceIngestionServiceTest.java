@@ -1,6 +1,7 @@
 package com.rightware.verox.evidence.application;
 
 import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
+import com.rightware.verox.checkout.application.CheckoutSubmissionCapabilityService;
 import com.rightware.verox.checkout.domain.CheckoutSession;
 import com.rightware.verox.checkout.repository.CheckoutSessionRepository;
 import com.rightware.verox.common.web.ApiException;
@@ -35,6 +36,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         EvidenceService evidenceService = mock(EvidenceService.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        CheckoutSubmissionCapabilityService capabilityService = mock(CheckoutSubmissionCapabilityService.class);
 
         Merchant merchant = new Merchant("Event Merchant");
         CheckoutSession session = session(merchant, Instant.now().plusSeconds(600));
@@ -66,6 +68,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
         );
 
         when(checkoutSessionRepository.findByPublicId("cs_test123")).thenReturn(Optional.of(session));
+        when(capabilityService.matches(session, "vx_checkout_valid")).thenReturn(true);
         when(paymentRepository.findByCheckoutSessionId(session.getId())).thenReturn(Optional.of(payment));
         when(evidenceService.registerCustomerRaw(
             eq(payment),
@@ -81,11 +84,13 @@ class CustomerMessageEvidenceIngestionServiceTest {
             checkoutSessionRepository,
             paymentRepository,
             evidenceService,
-            eventPublisher
+            eventPublisher,
+            capabilityService
         );
 
         CustomerMessageEvidenceView result = service.ingest(
             "cs_test123",
+            "vx_checkout_valid",
             "Confirmado ABC123. Transferiste 1.00MT."
         );
 
@@ -117,24 +122,57 @@ class CustomerMessageEvidenceIngestionServiceTest {
     }
 
     @Test
-    void rejectsExpiredCheckoutBeforePersistingCustomerEvidence() {
+    void rejectsMissingOrInvalidCapabilityBeforeReadingPayment() {
         CheckoutSessionRepository checkoutSessionRepository = mock(CheckoutSessionRepository.class);
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         EvidenceService evidenceService = mock(EvidenceService.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        CheckoutSubmissionCapabilityService capabilityService = mock(CheckoutSubmissionCapabilityService.class);
 
         Merchant merchant = new Merchant("Event Merchant");
-        CheckoutSession session = session(merchant, Instant.now().minusSeconds(60));
+        CheckoutSession session = session(merchant, Instant.now().plusSeconds(600));
         when(checkoutSessionRepository.findByPublicId("cs_test123")).thenReturn(Optional.of(session));
+        when(capabilityService.matches(session, "wrong-capability")).thenReturn(false);
 
         CustomerMessageEvidenceIngestionService service = new CustomerMessageEvidenceIngestionService(
             checkoutSessionRepository,
             paymentRepository,
             evidenceService,
-            eventPublisher
+            eventPublisher,
+            capabilityService
         );
 
-        assertThatThrownBy(() -> service.ingest("cs_test123", "M-Pesa message"))
+        assertThatThrownBy(() -> service.ingest("cs_test123", "wrong-capability", "M-Pesa message"))
+            .isInstanceOf(ApiException.class)
+            .hasMessageContaining("not found");
+
+        verify(paymentRepository, never()).findByCheckoutSessionId(any());
+        verify(evidenceService, never()).registerCustomerRaw(any(), any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(EvidenceIngestedEvent.class));
+    }
+
+    @Test
+    void rejectsExpiredCheckoutBeforePersistingCustomerEvidence() {
+        CheckoutSessionRepository checkoutSessionRepository = mock(CheckoutSessionRepository.class);
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        EvidenceService evidenceService = mock(EvidenceService.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        CheckoutSubmissionCapabilityService capabilityService = mock(CheckoutSubmissionCapabilityService.class);
+
+        Merchant merchant = new Merchant("Event Merchant");
+        CheckoutSession session = session(merchant, Instant.now().minusSeconds(60));
+        when(checkoutSessionRepository.findByPublicId("cs_test123")).thenReturn(Optional.of(session));
+        when(capabilityService.matches(session, "vx_checkout_valid")).thenReturn(true);
+
+        CustomerMessageEvidenceIngestionService service = new CustomerMessageEvidenceIngestionService(
+            checkoutSessionRepository,
+            paymentRepository,
+            evidenceService,
+            eventPublisher,
+            capabilityService
+        );
+
+        assertThatThrownBy(() -> service.ingest("cs_test123", "vx_checkout_valid", "M-Pesa message"))
             .isInstanceOf(ApiException.class)
             .hasMessageContaining("expired");
 
