@@ -1,5 +1,6 @@
 package com.rightware.verox.bridge.application;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.bridge.domain.Bridge;
 import com.rightware.verox.bridge.domain.BridgeCredential;
 import com.rightware.verox.bridge.domain.BridgeCredentialStatus;
@@ -41,10 +42,16 @@ public class BridgeService {
     }
 
     @Transactional
-    public IssuedBridgeCredential provision(Merchant merchant, String name, String provider) {
+    public IssuedBridgeCredential provision(
+        Merchant merchant,
+        ApiKeyEnvironment environment,
+        String name,
+        String provider
+    ) {
         Bridge bridge = bridgeRepository.save(new Bridge(
             resourceIdGenerator.generate("brg"),
             merchant,
+            environment,
             name,
             provider
         ));
@@ -94,6 +101,7 @@ public class BridgeService {
             bridge.getId(),
             bridge.getPublicId(),
             bridge.getMerchant().getId(),
+            bridge.getEnvironment(),
             bridge.getProvider()
         ));
     }
