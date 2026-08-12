@@ -51,6 +51,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
             "ev_customer123",
             merchant,
             payment,
+            ApiKeyEnvironment.TEST,
             EvidenceOrigin.CUSTOMER,
             EvidenceKind.SMS,
             EvidenceIngestSource.HOSTED_CHECKOUT,
@@ -110,6 +111,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
         EvidenceIngestedEvent event = eventCaptor.getValue();
         assertThat(event.merchantId()).isEqualTo(merchant.getId());
         assertThat(event.paymentId()).isEqualTo(payment.getId());
+        assertThat(event.environment()).isEqualTo(ApiKeyEnvironment.TEST);
         assertThat(event.origin()).isEqualTo(EvidenceOrigin.CUSTOMER);
         assertThat(event.evidencePublicId()).isEqualTo("ev_customer123");
     }
