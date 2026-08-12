@@ -1,5 +1,6 @@
 package com.rightware.verox.payment.repository;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.domain.PaymentStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -23,13 +24,15 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     Optional<Payment> findByPublicIdAndMerchantId(String publicId, UUID merchantId);
 
     @EntityGraph(attributePaths = {"merchant", "checkoutSession"})
-    List<Payment> findAllByMerchantIdAndStatusInOrderByCreatedAtAsc(
+    List<Payment> findAllByMerchantIdAndEnvironmentAndStatusInOrderByCreatedAtAsc(
         UUID merchantId,
+        ApiKeyEnvironment environment,
         Collection<PaymentStatus> statuses
     );
 
-    boolean existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
+    boolean existsByMerchantIdAndEnvironmentAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
         UUID merchantId,
+        ApiKeyEnvironment environment,
         String provider,
         String providerTransactionReference,
         UUID id
