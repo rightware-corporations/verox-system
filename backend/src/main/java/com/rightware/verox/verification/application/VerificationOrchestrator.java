@@ -1,5 +1,6 @@
 package com.rightware.verox.verification.application;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.evidence.application.EvidenceService;
 import com.rightware.verox.evidence.domain.Evidence;
 import com.rightware.verox.evidence.domain.EvidenceIngestSource;
@@ -14,12 +15,14 @@ import com.rightware.verox.verification.matching.MpesaEvidenceMatcher;
 import com.rightware.verox.verification.matching.VerificationMatchResult;
 import com.rightware.verox.verification.mpesa.MpesaMessageParser;
 import com.rightware.verox.verification.mpesa.ParsedMpesaMessage;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -44,6 +47,7 @@ public class VerificationOrchestrator {
     private final MpesaMessageParser messageParser;
     private final MpesaEvidenceMatcher evidenceMatcher;
     private final ApplicationEventPublisher eventPublisher;
+    private final Duration providerEvidenceGrace;
 
     public VerificationOrchestrator(
         PaymentRepository paymentRepository,
@@ -51,7 +55,8 @@ public class VerificationOrchestrator {
         EvidenceService evidenceService,
         MpesaMessageParser messageParser,
         MpesaEvidenceMatcher evidenceMatcher,
-        ApplicationEventPublisher eventPublisher
+        ApplicationEventPublisher eventPublisher,
+        @Value("${verox.verification.provider-evidence-grace-seconds:300}") long providerEvidenceGraceSeconds
     ) {
         this.paymentRepository = paymentRepository;
         this.evidenceRepository = evidenceRepository;
@@ -59,6 +64,7 @@ public class VerificationOrchestrator {
         this.messageParser = messageParser;
         this.evidenceMatcher = evidenceMatcher;
         this.eventPublisher = eventPublisher;
+        this.providerEvidenceGrace = Duration.ofSeconds(Math.max(0, providerEvidenceGraceSeconds));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -69,10 +75,11 @@ public class VerificationOrchestrator {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public List<VerificationRunResult> verifyMerchant(UUID merchantId) {
+    public List<VerificationRunResult> verifyMerchant(UUID merchantId, ApiKeyEnvironment environment) {
         List<VerificationRunResult> results = new ArrayList<>();
-        List<Payment> payments = paymentRepository.findAllByMerchantIdAndStatusInOrderByCreatedAtAsc(
+        List<Payment> payments = paymentRepository.findAllByMerchantIdAndEnvironmentAndStatusInOrderByCreatedAtAsc(
             merchantId,
+            environment,
             ACTIVE_STATUSES
         );
         for (Payment payment : payments) {
@@ -88,7 +95,7 @@ public class VerificationOrchestrator {
 
         List<Evidence> customerEvidence = evidenceRepository.findAllByPaymentIdOrderByReceivedAtAsc(payment.getId())
             .stream()
-            .filter(this::isCustomerMpesaMessage)
+            .filter(evidence -> isCustomerMpesaMessageForPayment(evidence, payment))
             .toList();
 
         if (customerEvidence.isEmpty()) {
@@ -121,8 +128,9 @@ public class VerificationOrchestrator {
         for (Map.Entry<String, CustomerCandidate> entry : matchReadyCustomers.entrySet()) {
             String transactionReference = entry.getValue().parsed().transactionReference().toUpperCase(Locale.ROOT);
             boolean alreadyUsed = paymentRepository
-                .existsByMerchantIdAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
+                .existsByMerchantIdAndEnvironmentAndProviderIgnoreCaseAndProviderTransactionReferenceIgnoreCaseAndIdNot(
                     payment.getMerchant().getId(),
+                    payment.getEnvironment(),
                     MVP_PROVIDER,
                     transactionReference,
                     payment.getId()
@@ -144,10 +152,17 @@ public class VerificationOrchestrator {
 
         payment.beginVerification();
 
+        Instant eligibleFrom = payment.getCheckoutSession().getCreatedAt();
+        Instant eligibleTo = payment.getCheckoutSession().getExpiresAt().plus(providerEvidenceGrace);
+
         List<ProviderCandidate> providerCandidates = evidenceRepository
-            .findAllByMerchantIdAndOriginAndPaymentIsNullOrderByReceivedAtAsc(
+            .findAllByMerchantIdAndEnvironmentAndOriginAndProviderIgnoreCaseAndPaymentIsNullAndCreatedAtBetweenOrderByCreatedAtAsc(
                 payment.getMerchant().getId(),
-                EvidenceOrigin.PROVIDER
+                payment.getEnvironment(),
+                EvidenceOrigin.PROVIDER,
+                MVP_PROVIDER,
+                eligibleFrom,
+                eligibleTo
             )
             .stream()
             .filter(this::isProviderMpesaMessage)
@@ -274,8 +289,9 @@ public class VerificationOrchestrator {
             && parsed.currency().equalsIgnoreCase(payment.getCurrency());
     }
 
-    private boolean isCustomerMpesaMessage(Evidence evidence) {
+    private boolean isCustomerMpesaMessageForPayment(Evidence evidence, Payment payment) {
         return evidence.getOrigin() == EvidenceOrigin.CUSTOMER
+            && evidence.getEnvironment() == payment.getEnvironment()
             && evidence.getKind() == EvidenceKind.SMS
             && evidence.getIngestSource() == EvidenceIngestSource.HOSTED_CHECKOUT
             && MVP_PROVIDER.equalsIgnoreCase(evidence.getProvider())
