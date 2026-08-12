@@ -25,20 +25,22 @@ public class VerificationEvidenceIngestedListener {
             if (event.origin() == EvidenceOrigin.CUSTOMER && event.paymentId() != null) {
                 VerificationRunResult result = verificationOrchestrator.verifyPayment(event.paymentId());
                 log.info(
-                    "VEROX Verification Engine processed customer evidence {} for payment {}: {} / {}",
+                    "VEROX Verification Engine processed customer evidence {} for payment {} [{}]: {} / {}",
                     event.evidencePublicId(),
                     result.paymentId(),
+                    event.environment(),
                     result.status(),
                     result.reason()
                 );
                 return;
             }
 
-            verificationOrchestrator.verifyMerchant(event.merchantId());
+            verificationOrchestrator.verifyMerchant(event.merchantId(), event.environment());
             log.info(
-                "VEROX Verification Engine processed provider evidence {} for merchant {}.",
+                "VEROX Verification Engine processed provider evidence {} for merchant {} [{}].",
                 event.evidencePublicId(),
-                event.merchantId()
+                event.merchantId(),
+                event.environment()
             );
         } catch (RuntimeException exception) {
             log.error(
