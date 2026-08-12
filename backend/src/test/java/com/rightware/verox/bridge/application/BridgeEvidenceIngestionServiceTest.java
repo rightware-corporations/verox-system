@@ -1,5 +1,6 @@
 package com.rightware.verox.bridge.application;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.bridge.domain.Bridge;
 import com.rightware.verox.bridge.domain.BridgeStatus;
 import com.rightware.verox.bridge.repository.BridgeRepository;
@@ -30,16 +31,23 @@ import static org.mockito.Mockito.when;
 class BridgeEvidenceIngestionServiceTest {
 
     @Test
-    void ingestsRawProviderSmsIntoEvidenceInfrastructureAndPublishesVerificationEvent() {
+    void ingestsRawProviderSmsIntoSameEnvironmentAndPublishesVerificationEvent() {
         BridgeRepository bridgeRepository = mock(BridgeRepository.class);
         EvidenceService evidenceService = mock(EvidenceService.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         Merchant merchant = new Merchant("Event Merchant");
-        Bridge bridge = new Bridge("brg_test123", merchant, "Receiving iPhone", "MPESA");
+        Bridge bridge = new Bridge(
+            "brg_test123",
+            merchant,
+            ApiKeyEnvironment.LIVE,
+            "Receiving iPhone",
+            "MPESA"
+        );
         BridgePrincipal principal = new BridgePrincipal(
             bridge.getId(),
             bridge.getPublicId(),
             merchant.getId(),
+            bridge.getEnvironment(),
             bridge.getProvider()
         );
         Instant receivedAt = Instant.parse("2026-08-09T14:00:00Z");
@@ -47,6 +55,7 @@ class BridgeEvidenceIngestionServiceTest {
             "ev_test123",
             merchant,
             null,
+            ApiKeyEnvironment.LIVE,
             EvidenceOrigin.PROVIDER,
             EvidenceKind.SMS,
             EvidenceIngestSource.VEROX_BRIDGE,
@@ -64,6 +73,7 @@ class BridgeEvidenceIngestionServiceTest {
             .thenReturn(Optional.of(bridge));
         when(evidenceService.registerProviderRaw(
             eq(merchant),
+            eq(ApiKeyEnvironment.LIVE),
             eq(EvidenceKind.SMS),
             eq(EvidenceIngestSource.VEROX_BRIDGE),
             eq("MPESA"),
@@ -91,6 +101,7 @@ class BridgeEvidenceIngestionServiceTest {
         assertThat(result.provider()).isEqualTo("MPESA");
         verify(evidenceService).registerProviderRaw(
             merchant,
+            ApiKeyEnvironment.LIVE,
             EvidenceKind.SMS,
             EvidenceIngestSource.VEROX_BRIDGE,
             "MPESA",
@@ -104,6 +115,7 @@ class BridgeEvidenceIngestionServiceTest {
         EvidenceIngestedEvent event = eventCaptor.getValue();
         assertThat(event.merchantId()).isEqualTo(merchant.getId());
         assertThat(event.paymentId()).isNull();
+        assertThat(event.environment()).isEqualTo(ApiKeyEnvironment.LIVE);
         assertThat(event.origin()).isEqualTo(EvidenceOrigin.PROVIDER);
         assertThat(event.evidencePublicId()).isEqualTo("ev_test123");
     }
@@ -114,11 +126,18 @@ class BridgeEvidenceIngestionServiceTest {
         EvidenceService evidenceService = mock(EvidenceService.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         Merchant merchant = new Merchant("Event Merchant");
-        Bridge bridge = new Bridge("brg_test123", merchant, "Receiving iPhone", "MPESA");
+        Bridge bridge = new Bridge(
+            "brg_test123",
+            merchant,
+            ApiKeyEnvironment.TEST,
+            "Receiving iPhone",
+            "MPESA"
+        );
         BridgePrincipal principal = new BridgePrincipal(
             bridge.getId(),
             bridge.getPublicId(),
             merchant.getId(),
+            bridge.getEnvironment(),
             bridge.getProvider()
         );
 
@@ -138,7 +157,7 @@ class BridgeEvidenceIngestionServiceTest {
             .hasMessageContaining("Bridge credential");
 
         verify(bridgeRepository, never()).findByIdAndStatus(any(), any());
-        verify(evidenceService, never()).registerProviderRaw(any(), any(), any(), any(), any(), any(), any());
+        verify(evidenceService, never()).registerProviderRaw(any(), any(), any(), any(), any(), any(), any(), any());
         verify(eventPublisher, never()).publishEvent(any(EvidenceIngestedEvent.class));
     }
 }
