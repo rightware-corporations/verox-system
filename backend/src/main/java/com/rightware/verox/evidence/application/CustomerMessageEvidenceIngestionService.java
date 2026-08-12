@@ -1,5 +1,6 @@
 package com.rightware.verox.evidence.application;
 
+import com.rightware.verox.checkout.application.CheckoutSubmissionCapabilityService;
 import com.rightware.verox.checkout.domain.CheckoutSession;
 import com.rightware.verox.checkout.domain.CheckoutSessionStatus;
 import com.rightware.verox.checkout.repository.CheckoutSessionRepository;
@@ -25,27 +26,30 @@ public class CustomerMessageEvidenceIngestionService {
     private final PaymentRepository paymentRepository;
     private final EvidenceService evidenceService;
     private final ApplicationEventPublisher eventPublisher;
+    private final CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService;
 
     public CustomerMessageEvidenceIngestionService(
         CheckoutSessionRepository checkoutSessionRepository,
         PaymentRepository paymentRepository,
         EvidenceService evidenceService,
-        ApplicationEventPublisher eventPublisher
+        ApplicationEventPublisher eventPublisher,
+        CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService
     ) {
         this.checkoutSessionRepository = checkoutSessionRepository;
         this.paymentRepository = paymentRepository;
         this.evidenceService = evidenceService;
         this.eventPublisher = eventPublisher;
+        this.checkoutSubmissionCapabilityService = checkoutSubmissionCapabilityService;
     }
 
     @Transactional
-    public CustomerMessageEvidenceView ingest(String checkoutSessionId, String content) {
+    public CustomerMessageEvidenceView ingest(String checkoutSessionId, String checkoutCapability, String content) {
         CheckoutSession session = checkoutSessionRepository.findByPublicId(checkoutSessionId)
-            .orElseThrow(() -> new ApiException(
-                HttpStatus.NOT_FOUND,
-                "CHECKOUT_SESSION_NOT_FOUND",
-                "Checkout Session was not found."
-            ));
+            .orElseThrow(this::checkoutNotFound);
+
+        if (!checkoutSubmissionCapabilityService.matches(session, checkoutCapability)) {
+            throw checkoutNotFound();
+        }
 
         Instant receivedAt = Instant.now();
         if (!session.getExpiresAt().isAfter(receivedAt)) {
@@ -97,6 +101,14 @@ public class CustomerMessageEvidenceIngestionService {
             evidence.getIngestSource().name(),
             evidence.getProvider(),
             evidence.getReceivedAt()
+        );
+    }
+
+    private ApiException checkoutNotFound() {
+        return new ApiException(
+            HttpStatus.NOT_FOUND,
+            "CHECKOUT_SESSION_NOT_FOUND",
+            "Checkout Session was not found."
         );
     }
 }
