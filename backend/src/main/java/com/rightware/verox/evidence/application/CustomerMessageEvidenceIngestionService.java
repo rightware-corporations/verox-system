@@ -83,6 +83,7 @@ public class CustomerMessageEvidenceIngestionService {
         eventPublisher.publishEvent(new EvidenceIngestedEvent(
             payment.getMerchant().getId(),
             payment.getId(),
+            evidence.getEnvironment(),
             evidence.getOrigin(),
             evidence.getPublicId()
         ));
