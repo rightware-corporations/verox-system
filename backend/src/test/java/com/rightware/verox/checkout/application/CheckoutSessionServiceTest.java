@@ -32,6 +32,9 @@ class CheckoutSessionServiceTest {
         MerchantRepository merchantRepository = mock(MerchantRepository.class);
         ResourceIdGenerator ids = mock(ResourceIdGenerator.class);
         CheckoutRequestFingerprint fingerprint = mock(CheckoutRequestFingerprint.class);
+        CheckoutSubmissionCapabilityService capabilities = new CheckoutSubmissionCapabilityService(
+            "test-checkout-capability-secret"
+        );
 
         Merchant merchant = new Merchant("Event Merchant");
         when(merchantRepository.findById(merchant.getId())).thenReturn(Optional.of(merchant));
@@ -49,6 +52,7 @@ class CheckoutSessionServiceTest {
             ids,
             new RedirectUrlValidator(),
             fingerprint,
+            capabilities,
             "https://checkout.verox.test/",
             15
         );
@@ -68,7 +72,8 @@ class CheckoutSessionServiceTest {
         assertThat(result.id()).isEqualTo("cs_test123");
         assertThat(result.paymentId()).isEqualTo("pay_test123");
         assertThat(result.amount()).isEqualTo("1500.00");
-        assertThat(result.checkoutUrl()).isEqualTo("https://checkout.verox.test/c/cs_test123");
+        assertThat(result.checkoutUrl())
+            .startsWith("https://checkout.verox.test/c/cs_test123#vx_capability=vx_checkout_");
         assertThat(result.status()).isEqualTo("OPEN");
         assertThat(result.paymentStatus()).isEqualTo("PENDING");
         verify(checkoutRepository).save(any());
@@ -82,6 +87,9 @@ class CheckoutSessionServiceTest {
         MerchantRepository merchantRepository = mock(MerchantRepository.class);
         ResourceIdGenerator ids = mock(ResourceIdGenerator.class);
         CheckoutRequestFingerprint fingerprint = mock(CheckoutRequestFingerprint.class);
+        CheckoutSubmissionCapabilityService capabilities = new CheckoutSubmissionCapabilityService(
+            "test-checkout-capability-secret"
+        );
 
         Merchant merchant = new Merchant("Event Merchant");
         CheckoutSession existing = new CheckoutSession(
@@ -112,6 +120,7 @@ class CheckoutSessionServiceTest {
             ids,
             new RedirectUrlValidator(),
             fingerprint,
+            capabilities,
             "https://checkout.verox.test",
             15
         );
