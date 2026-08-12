@@ -92,6 +92,7 @@ public class CheckoutSession {
         String requestFingerprint,
         Instant expiresAt
     ) {
+        Instant now = Instant.now();
         this.id = UUID.randomUUID();
         this.publicId = publicId;
         this.merchant = merchant;
@@ -106,6 +107,8 @@ public class CheckoutSession {
         this.idempotencyKey = idempotencyKey;
         this.requestFingerprint = requestFingerprint;
         this.expiresAt = expiresAt;
+        this.createdAt = now;
+        this.updatedAt = now;
     }
 
     @PrePersist
