@@ -1,5 +1,6 @@
 package com.rightware.verox.bridge.domain;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.merchant.domain.Merchant;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -31,6 +32,10 @@ public class Bridge {
     @JoinColumn(name = "merchant_id", nullable = false)
     private Merchant merchant;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private ApiKeyEnvironment environment;
+
     @Column(nullable = false, length = 160)
     private String name;
 
@@ -50,10 +55,17 @@ public class Bridge {
     protected Bridge() {
     }
 
-    public Bridge(String publicId, Merchant merchant, String name, String provider) {
+    public Bridge(
+        String publicId,
+        Merchant merchant,
+        ApiKeyEnvironment environment,
+        String name,
+        String provider
+    ) {
         this.id = UUID.randomUUID();
         this.publicId = requireText(publicId, "publicId");
         this.merchant = Objects.requireNonNull(merchant, "merchant");
+        this.environment = Objects.requireNonNull(environment, "environment");
         this.name = requireText(name, "name");
         this.provider = requireText(provider, "provider").toUpperCase();
         this.status = BridgeStatus.ACTIVE;
@@ -96,6 +108,10 @@ public class Bridge {
 
     public Merchant getMerchant() {
         return merchant;
+    }
+
+    public ApiKeyEnvironment getEnvironment() {
+        return environment;
     }
 
     public String getName() {
