@@ -50,6 +50,8 @@ verox:
   verification:
     provider-evidence-grace-seconds: ${VEROX_PROVIDER_EVIDENCE_GRACE_SECONDS:300}
   webhook:
+    destination:
+      allow-local-development: ${VEROX_WEBHOOK_ALLOW_LOCAL_DEVELOPMENT:false}
     master-secret: ${VEROX_WEBHOOK_MASTER_SECRET:verox-dev-webhook-master-secret-change-me}
     delivery:
       poll-delay-ms: ${VEROX_WEBHOOK_POLL_DELAY_MS:2000}
