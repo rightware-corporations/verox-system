@@ -1,0 +1,5 @@
+﻿verox:
+  checkout:
+    capability-master-secret: ${VEROX_CHECKOUT_CAPABILITY_MASTER_SECRET}
+  webhook:
+    master-secret: ${VEROX_WEBHOOK_MASTER_SECRET}
