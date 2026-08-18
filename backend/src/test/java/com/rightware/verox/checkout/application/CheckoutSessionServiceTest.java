@@ -10,6 +10,7 @@ import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.merchant.repository.MerchantRepository;
 import com.rightware.verox.payment.repository.PaymentRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -50,7 +51,7 @@ class CheckoutSessionServiceTest {
             merchantRepository,
             new MoneyConverter(),
             ids,
-            new RedirectUrlValidator(),
+            new RedirectUrlValidator(new MockEnvironment(), false),
             fingerprint,
             capabilities,
             "https://checkout.verox.test/",
@@ -118,7 +119,7 @@ class CheckoutSessionServiceTest {
             merchantRepository,
             new MoneyConverter(),
             ids,
-            new RedirectUrlValidator(),
+            new RedirectUrlValidator(new MockEnvironment(), false),
             fingerprint,
             capabilities,
             "https://checkout.verox.test",

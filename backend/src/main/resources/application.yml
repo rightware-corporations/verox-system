@@ -47,6 +47,8 @@ verox:
     base-url: ${VEROX_CHECKOUT_BASE_URL:http://localhost:3000}
     session-ttl-minutes: ${VEROX_CHECKOUT_TTL_MINUTES:15}
     capability-master-secret: ${VEROX_CHECKOUT_CAPABILITY_MASTER_SECRET:verox-dev-checkout-capability-master-secret-change-me}
+    redirect:
+      allow-http-local-development: ${VEROX_CHECKOUT_REDIRECT_ALLOW_HTTP_LOCAL_DEVELOPMENT:false}
   verification:
     provider-evidence-grace-seconds: ${VEROX_PROVIDER_EVIDENCE_GRACE_SECONDS:300}
   webhook:
