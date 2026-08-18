@@ -1,5 +1,8 @@
 package com.rightware.verox.common.web;
 
+import com.rightware.verox.common.ratelimit.RateLimitExceededException;
+
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -11,6 +14,23 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ErrorEnvelope> handleRateLimitExceeded(
+        RateLimitExceededException exception
+    ) {
+        return ResponseEntity
+            .status(exception.getStatus())
+            .header(
+                HttpHeaders.RETRY_AFTER,
+                Long.toString(exception.getRetryAfterSeconds())
+            )
+            .body(
+                error(
+                    exception.getCode(),
+                    exception.getMessage()
+                )
+            );
+    }
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ErrorEnvelope> handleApiException(ApiException exception) {
         return ResponseEntity

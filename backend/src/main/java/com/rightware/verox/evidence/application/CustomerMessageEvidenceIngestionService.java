@@ -4,6 +4,7 @@ import com.rightware.verox.checkout.application.CheckoutSubmissionCapabilityServ
 import com.rightware.verox.checkout.domain.CheckoutSession;
 import com.rightware.verox.checkout.domain.CheckoutSessionStatus;
 import com.rightware.verox.checkout.repository.CheckoutSessionRepository;
+import com.rightware.verox.common.ratelimit.RateLimitGuard;
 import com.rightware.verox.common.web.ApiException;
 import com.rightware.verox.evidence.domain.Evidence;
 import com.rightware.verox.evidence.domain.EvidenceIngestSource;
@@ -27,31 +28,45 @@ public class CustomerMessageEvidenceIngestionService {
     private final EvidenceService evidenceService;
     private final ApplicationEventPublisher eventPublisher;
     private final CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService;
+    private final RateLimitGuard rateLimitGuard;
 
     public CustomerMessageEvidenceIngestionService(
         CheckoutSessionRepository checkoutSessionRepository,
         PaymentRepository paymentRepository,
         EvidenceService evidenceService,
         ApplicationEventPublisher eventPublisher,
-        CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService
+        CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService,
+        RateLimitGuard rateLimitGuard
     ) {
         this.checkoutSessionRepository = checkoutSessionRepository;
         this.paymentRepository = paymentRepository;
         this.evidenceService = evidenceService;
         this.eventPublisher = eventPublisher;
-        this.checkoutSubmissionCapabilityService = checkoutSubmissionCapabilityService;
+        this.checkoutSubmissionCapabilityService =
+            checkoutSubmissionCapabilityService;
+        this.rateLimitGuard = rateLimitGuard;
     }
 
     @Transactional
-    public CustomerMessageEvidenceView ingest(String checkoutSessionId, String checkoutCapability, String content) {
-        CheckoutSession session = checkoutSessionRepository.findByPublicId(checkoutSessionId)
-            .orElseThrow(this::checkoutNotFound);
+    public CustomerMessageEvidenceView ingest(
+        String checkoutSessionId,
+        String checkoutCapability,
+        String content
+    ) {
+        CheckoutSession session =
+            checkoutSessionRepository
+                .findByPublicId(checkoutSessionId)
+                .orElseThrow(this::checkoutNotFound);
 
-        if (!checkoutSubmissionCapabilityService.matches(session, checkoutCapability)) {
+        if (!checkoutSubmissionCapabilityService.matches(
+            session,
+            checkoutCapability
+        )) {
             throw checkoutNotFound();
         }
 
         Instant receivedAt = Instant.now();
+
         if (!session.getExpiresAt().isAfter(receivedAt)) {
             throw new ApiException(
                 HttpStatus.GONE,
@@ -59,6 +74,7 @@ public class CustomerMessageEvidenceIngestionService {
                 "Checkout Session has expired."
             );
         }
+
         if (session.getStatus() != CheckoutSessionStatus.OPEN) {
             throw new ApiException(
                 HttpStatus.CONFLICT,
@@ -67,30 +83,47 @@ public class CustomerMessageEvidenceIngestionService {
             );
         }
 
-        Payment payment = paymentRepository.findByCheckoutSessionId(session.getId())
-            .orElseThrow(() -> new ApiException(
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                "PAYMENT_STATE_ERROR",
-                "Checkout Session exists without its Payment."
-            ));
-
-        Evidence evidence = evidenceService.registerCustomerRaw(
-            payment,
-            EvidenceKind.SMS,
-            EvidenceIngestSource.HOSTED_CHECKOUT,
-            MVP_PROVIDER,
-            content,
-            null,
-            receivedAt
+        /*
+         * Security ordering matters:
+         *
+         * - invalid capabilities never consume the legitimate checkout bucket;
+         * - expired/closed checkouts do not consume it;
+         * - rate limiting happens before Payment read, Evidence persistence
+         *   and verification-event publication.
+         */
+        rateLimitGuard.checkCheckoutSubmission(
+            session.getId()
         );
 
-        eventPublisher.publishEvent(new EvidenceIngestedEvent(
-            payment.getMerchant().getId(),
-            payment.getId(),
-            evidence.getEnvironment(),
-            evidence.getOrigin(),
-            evidence.getPublicId()
-        ));
+        Payment payment =
+            paymentRepository
+                .findByCheckoutSessionId(session.getId())
+                .orElseThrow(() -> new ApiException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "PAYMENT_STATE_ERROR",
+                    "Checkout Session exists without its Payment."
+                ));
+
+        Evidence evidence =
+            evidenceService.registerCustomerRaw(
+                payment,
+                EvidenceKind.SMS,
+                EvidenceIngestSource.HOSTED_CHECKOUT,
+                MVP_PROVIDER,
+                content,
+                null,
+                receivedAt
+            );
+
+        eventPublisher.publishEvent(
+            new EvidenceIngestedEvent(
+                payment.getMerchant().getId(),
+                payment.getId(),
+                evidence.getEnvironment(),
+                evidence.getOrigin(),
+                evidence.getPublicId()
+            )
+        );
 
         return new CustomerMessageEvidenceView(
             evidence.getPublicId(),

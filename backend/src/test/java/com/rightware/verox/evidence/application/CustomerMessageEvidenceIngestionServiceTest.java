@@ -4,6 +4,8 @@ import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.checkout.application.CheckoutSubmissionCapabilityService;
 import com.rightware.verox.checkout.domain.CheckoutSession;
 import com.rightware.verox.checkout.repository.CheckoutSessionRepository;
+import com.rightware.verox.common.ratelimit.RateLimitExceededException;
+import com.rightware.verox.common.ratelimit.RateLimitGuard;
 import com.rightware.verox.common.web.ApiException;
 import com.rightware.verox.evidence.domain.Evidence;
 import com.rightware.verox.evidence.domain.EvidenceIngestSource;
@@ -23,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -37,6 +40,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
         EvidenceService evidenceService = mock(EvidenceService.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         CheckoutSubmissionCapabilityService capabilityService = mock(CheckoutSubmissionCapabilityService.class);
+        RateLimitGuard rateLimitGuard = mock(RateLimitGuard.class);
 
         Merchant merchant = new Merchant("Event Merchant");
         CheckoutSession session = session(merchant, Instant.now().plusSeconds(600));
@@ -85,7 +89,8 @@ class CustomerMessageEvidenceIngestionServiceTest {
             paymentRepository,
             evidenceService,
             eventPublisher,
-            capabilityService
+            capabilityService,
+            rateLimitGuard
         );
 
         CustomerMessageEvidenceView result = service.ingest(
@@ -93,6 +98,8 @@ class CustomerMessageEvidenceIngestionServiceTest {
             "vx_checkout_valid",
             "Confirmado ABC123. Transferiste 1.00MT."
         );
+
+        verify(rateLimitGuard).checkCheckoutSubmission(session.getId());
 
         assertThat(result.id()).isEqualTo("ev_customer123");
         assertThat(result.checkoutSessionId()).isEqualTo("cs_test123");
@@ -128,6 +135,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
         EvidenceService evidenceService = mock(EvidenceService.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         CheckoutSubmissionCapabilityService capabilityService = mock(CheckoutSubmissionCapabilityService.class);
+        RateLimitGuard rateLimitGuard = mock(RateLimitGuard.class);
 
         Merchant merchant = new Merchant("Event Merchant");
         CheckoutSession session = session(merchant, Instant.now().plusSeconds(600));
@@ -139,13 +147,15 @@ class CustomerMessageEvidenceIngestionServiceTest {
             paymentRepository,
             evidenceService,
             eventPublisher,
-            capabilityService
+            capabilityService,
+            rateLimitGuard
         );
 
         assertThatThrownBy(() -> service.ingest("cs_test123", "wrong-capability", "M-Pesa message"))
             .isInstanceOf(ApiException.class)
             .hasMessageContaining("not found");
 
+        verify(rateLimitGuard, never()).checkCheckoutSubmission(session.getId());
         verify(paymentRepository, never()).findByCheckoutSessionId(any());
         verify(evidenceService, never()).registerCustomerRaw(any(), any(), any(), any(), any(), any(), any());
         verify(eventPublisher, never()).publishEvent(any(EvidenceIngestedEvent.class));
@@ -158,6 +168,7 @@ class CustomerMessageEvidenceIngestionServiceTest {
         EvidenceService evidenceService = mock(EvidenceService.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         CheckoutSubmissionCapabilityService capabilityService = mock(CheckoutSubmissionCapabilityService.class);
+        RateLimitGuard rateLimitGuard = mock(RateLimitGuard.class);
 
         Merchant merchant = new Merchant("Event Merchant");
         CheckoutSession session = session(merchant, Instant.now().minusSeconds(60));
@@ -169,7 +180,8 @@ class CustomerMessageEvidenceIngestionServiceTest {
             paymentRepository,
             evidenceService,
             eventPublisher,
-            capabilityService
+            capabilityService,
+            rateLimitGuard
         );
 
         assertThatThrownBy(() -> service.ingest("cs_test123", "vx_checkout_valid", "M-Pesa message"))
@@ -181,6 +193,98 @@ class CustomerMessageEvidenceIngestionServiceTest {
         verify(eventPublisher, never()).publishEvent(any(EvidenceIngestedEvent.class));
     }
 
+    @Test
+    void rejectsRateLimitedCheckoutBeforeReadingPaymentOrPersistingEvidence() {
+        CheckoutSessionRepository checkoutSessionRepository =
+            mock(CheckoutSessionRepository.class);
+        PaymentRepository paymentRepository =
+            mock(PaymentRepository.class);
+        EvidenceService evidenceService =
+            mock(EvidenceService.class);
+        ApplicationEventPublisher eventPublisher =
+            mock(ApplicationEventPublisher.class);
+        CheckoutSubmissionCapabilityService capabilityService =
+            mock(CheckoutSubmissionCapabilityService.class);
+        RateLimitGuard rateLimitGuard =
+            mock(RateLimitGuard.class);
+
+        Merchant merchant =
+            new Merchant("Event Merchant");
+
+        CheckoutSession session =
+            session(
+                merchant,
+                Instant.now().plusSeconds(600)
+            );
+
+        when(
+            checkoutSessionRepository.findByPublicId(
+                "cs_test123"
+            )
+        ).thenReturn(Optional.of(session));
+
+        when(
+            capabilityService.matches(
+                session,
+                "vx_checkout_valid"
+            )
+        ).thenReturn(true);
+
+        doThrow(
+            new RateLimitExceededException(
+                "RATE_LIMIT_EXCEEDED",
+                "Too many requests. Try again later.",
+                45
+            )
+        ).when(rateLimitGuard)
+            .checkCheckoutSubmission(session.getId());
+
+        CustomerMessageEvidenceIngestionService service =
+            new CustomerMessageEvidenceIngestionService(
+                checkoutSessionRepository,
+                paymentRepository,
+                evidenceService,
+                eventPublisher,
+                capabilityService,
+                rateLimitGuard
+            );
+
+        assertThatThrownBy(() ->
+            service.ingest(
+                "cs_test123",
+                "vx_checkout_valid",
+                "M-Pesa message"
+            )
+        )
+            .isInstanceOf(
+                RateLimitExceededException.class
+            )
+            .hasMessageContaining(
+                "Too many requests"
+            );
+
+        verify(rateLimitGuard)
+            .checkCheckoutSubmission(session.getId());
+
+        verify(paymentRepository, never())
+            .findByCheckoutSessionId(any());
+
+        verify(evidenceService, never())
+            .registerCustomerRaw(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            );
+
+        verify(eventPublisher, never())
+            .publishEvent(
+                any(EvidenceIngestedEvent.class)
+            );
+    }
     private CheckoutSession session(Merchant merchant, Instant expiresAt) {
         return new CheckoutSession(
             "cs_test123",
