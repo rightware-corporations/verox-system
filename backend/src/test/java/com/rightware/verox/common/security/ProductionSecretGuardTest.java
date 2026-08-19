@@ -21,8 +21,36 @@ class ProductionSecretGuardTest {
         assertThatCode(() -> new ProductionSecretGuard(
             environment,
             ProductionSecretGuard.DEVELOPMENT_WEBHOOK_MASTER_SECRET,
-            ProductionSecretGuard.DEVELOPMENT_CHECKOUT_CAPABILITY_MASTER_SECRET
+            ProductionSecretGuard.DEVELOPMENT_CHECKOUT_CAPABILITY_MASTER_SECRET,
+            true,
+            true
         )).doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsMerchantBootstrapInProduction() {
+        assertThatThrownBy(() -> new ProductionSecretGuard(
+            productionEnvironment(),
+            STRONG_WEBHOOK_SECRET,
+            STRONG_CHECKOUT_SECRET,
+            true,
+            false
+        ))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("VEROX_BOOTSTRAP_ENABLED");
+    }
+
+    @Test
+    void rejectsBridgeBootstrapInProduction() {
+        assertThatThrownBy(() -> new ProductionSecretGuard(
+            productionEnvironment(),
+            STRONG_WEBHOOK_SECRET,
+            STRONG_CHECKOUT_SECRET,
+            false,
+            true
+        ))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("VEROX_BRIDGE_BOOTSTRAP_ENABLED");
     }
 
     @Test
@@ -30,7 +58,9 @@ class ProductionSecretGuardTest {
         assertThatThrownBy(() -> new ProductionSecretGuard(
             productionEnvironment(),
             "",
-            STRONG_CHECKOUT_SECRET
+            STRONG_CHECKOUT_SECRET,
+            false,
+            false
         ))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("VEROX_WEBHOOK_MASTER_SECRET");
@@ -41,7 +71,9 @@ class ProductionSecretGuardTest {
         assertThatThrownBy(() -> new ProductionSecretGuard(
             productionEnvironment(),
             STRONG_WEBHOOK_SECRET,
-            ""
+            "",
+            false,
+            false
         ))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("VEROX_CHECKOUT_CAPABILITY_MASTER_SECRET");
@@ -52,7 +84,9 @@ class ProductionSecretGuardTest {
         assertThatThrownBy(() -> new ProductionSecretGuard(
             productionEnvironment(),
             ProductionSecretGuard.DEVELOPMENT_WEBHOOK_MASTER_SECRET,
-            STRONG_CHECKOUT_SECRET
+            STRONG_CHECKOUT_SECRET,
+            false,
+            false
         ))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("development default");
@@ -63,7 +97,9 @@ class ProductionSecretGuardTest {
         assertThatThrownBy(() -> new ProductionSecretGuard(
             productionEnvironment(),
             STRONG_WEBHOOK_SECRET,
-            ProductionSecretGuard.DEVELOPMENT_CHECKOUT_CAPABILITY_MASTER_SECRET
+            ProductionSecretGuard.DEVELOPMENT_CHECKOUT_CAPABILITY_MASTER_SECRET,
+            false,
+            false
         ))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("development default");
@@ -74,7 +110,9 @@ class ProductionSecretGuardTest {
         assertThatThrownBy(() -> new ProductionSecretGuard(
             productionEnvironment(),
             "too-short",
-            STRONG_CHECKOUT_SECRET
+            STRONG_CHECKOUT_SECRET,
+            false,
+            false
         ))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("at least 32 bytes");
@@ -82,18 +120,22 @@ class ProductionSecretGuardTest {
         assertThatThrownBy(() -> new ProductionSecretGuard(
             productionEnvironment(),
             STRONG_WEBHOOK_SECRET,
-            "too-short"
+            "too-short",
+            false,
+            false
         ))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("at least 32 bytes");
     }
 
     @Test
-    void acceptsStrongProductionSecrets() {
+    void acceptsStrongProductionSecretsWithBootstrapsDisabled() {
         assertThatCode(() -> new ProductionSecretGuard(
             productionEnvironment(),
             STRONG_WEBHOOK_SECRET,
-            STRONG_CHECKOUT_SECRET
+            STRONG_CHECKOUT_SECRET,
+            false,
+            false
         )).doesNotThrowAnyException();
     }
 

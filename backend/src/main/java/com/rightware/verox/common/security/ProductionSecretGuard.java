@@ -21,11 +21,23 @@ public class ProductionSecretGuard {
     public ProductionSecretGuard(
         Environment environment,
         @Value("${verox.webhook.master-secret:}") String webhookMasterSecret,
-        @Value("${verox.checkout.capability-master-secret:}") String checkoutCapabilityMasterSecret
+        @Value("${verox.checkout.capability-master-secret:}") String checkoutCapabilityMasterSecret,
+        @Value("${verox.bootstrap.enabled:false}") boolean merchantBootstrapEnabled,
+        @Value("${verox.bridge.bootstrap.enabled:false}") boolean bridgeBootstrapEnabled
     ) {
         if (!environment.acceptsProfiles(Profiles.of("production"))) {
             return;
         }
+
+        requireBootstrapDisabled(
+            "VEROX_BOOTSTRAP_ENABLED",
+            merchantBootstrapEnabled
+        );
+
+        requireBootstrapDisabled(
+            "VEROX_BRIDGE_BOOTSTRAP_ENABLED",
+            bridgeBootstrapEnabled
+        );
 
         requireProductionSecret(
             "VEROX_WEBHOOK_MASTER_SECRET",
@@ -38,6 +50,18 @@ public class ProductionSecretGuard {
             checkoutCapabilityMasterSecret,
             DEVELOPMENT_CHECKOUT_CAPABILITY_MASTER_SECRET
         );
+    }
+
+    private static void requireBootstrapDisabled(
+        String environmentVariable,
+        boolean enabled
+    ) {
+        if (enabled) {
+            throw new IllegalStateException(
+                environmentVariable
+                    + " must be false when the production Spring profile is active"
+            );
+        }
     }
 
     private static void requireProductionSecret(
