@@ -24,6 +24,6 @@ public class PaymentController {
         @AuthenticationPrincipal MerchantPrincipal principal,
         @PathVariable String paymentId
     ) {
-        return paymentService.getForMerchant(principal.merchantId(), paymentId);
+        return paymentService.getForMerchant(principal, paymentId);
     }
 }

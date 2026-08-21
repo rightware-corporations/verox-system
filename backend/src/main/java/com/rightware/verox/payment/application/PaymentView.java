@@ -7,9 +7,11 @@ public record PaymentView(
     String checkoutSessionId,
     String externalReference,
     String status,
+    String effectiveStatus,
     String amount,
     String currency,
     String provider,
-    Instant confirmedAt
+    Instant confirmedAt,
+    Instant manuallyAcceptedAt
 ) {
 }

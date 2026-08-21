@@ -4,6 +4,7 @@ import com.rightware.verox.common.id.ResourceIdGenerator;
 import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.merchant.repository.MerchantRepository;
 import com.rightware.verox.payment.application.PaymentConfirmedEvent;
+import com.rightware.verox.pilot.application.PaymentManuallyAcceptedEvent;
 import com.rightware.verox.webhook.domain.WebhookDelivery;
 import com.rightware.verox.webhook.domain.WebhookEndpoint;
 import com.rightware.verox.webhook.domain.WebhookEndpointStatus;
@@ -25,6 +26,7 @@ import java.util.Map;
 public class WebhookOutboxService {
 
     private static final String PAYMENT_CONFIRMED = "payment.confirmed";
+    private static final String PAYMENT_MANUALLY_ACCEPTED = "payment.manually_accepted";
 
     private final MerchantRepository merchantRepository;
     private final WebhookEndpointRepository endpointRepository;
@@ -81,6 +83,51 @@ public class WebhookOutboxService {
         return event;
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public WebhookEvent enqueuePaymentManuallyAccepted(PaymentManuallyAcceptedEvent accepted) {
+        WebhookEvent existing = eventRepository
+            .findByMerchantIdAndTypeAndAggregateTypeAndAggregatePublicId(
+                accepted.merchantId(),
+                PAYMENT_MANUALLY_ACCEPTED,
+                "PAYMENT",
+                accepted.paymentId()
+            )
+            .orElse(null);
+
+        if (existing != null) {
+            ensureDelivery(existing, accepted.merchantId());
+            return existing;
+        }
+
+        Merchant merchant = merchantRepository.findById(accepted.merchantId())
+            .orElseThrow(() -> new IllegalStateException(
+                "Merchant was not found for webhook event"
+            ));
+
+        Instant createdAt = accepted.manuallyAcceptedAt() == null
+            ? Instant.now()
+            : accepted.manuallyAcceptedAt();
+
+        String eventPublicId = resourceIdGenerator.generate("evt");
+        String payload = serializeManualAcceptancePayload(
+            eventPublicId,
+            createdAt,
+            accepted
+        );
+
+        WebhookEvent event = eventRepository.save(new WebhookEvent(
+            eventPublicId,
+            merchant,
+            PAYMENT_MANUALLY_ACCEPTED,
+            "PAYMENT",
+            accepted.paymentId(),
+            payload,
+            createdAt
+        ));
+
+        ensureDelivery(event, accepted.merchantId());
+        return event;
+    }
     private void ensureDelivery(WebhookEvent event, java.util.UUID merchantId) {
         WebhookEndpoint endpoint = endpointRepository.findByMerchantIdAndStatus(merchantId, WebhookEndpointStatus.ACTIVE)
             .orElse(null);
@@ -98,6 +145,36 @@ public class WebhookOutboxService {
         ));
     }
 
+    private String serializeManualAcceptancePayload(
+        String eventId,
+        Instant createdAt,
+        PaymentManuallyAcceptedEvent accepted
+    ) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("payment_id", accepted.paymentId());
+        data.put("checkout_session_id", accepted.checkoutSessionId());
+        data.put("external_reference", accepted.externalReference());
+        data.put("amount", accepted.amount());
+        data.put("currency", accepted.currency());
+        data.put("status", accepted.status());
+        data.put("effective_status", "MANUALLY_ACCEPTED");
+        data.put("manually_accepted_at", accepted.manuallyAcceptedAt());
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", eventId);
+        payload.put("type", PAYMENT_MANUALLY_ACCEPTED);
+        payload.put("created_at", createdAt);
+        payload.put("data", data);
+
+        try {
+            return jsonMapper.writeValueAsString(payload);
+        } catch (JacksonException exception) {
+            throw new IllegalStateException(
+                "Unable to serialize webhook event payload",
+                exception
+            );
+        }
+    }
     private String serializePayload(String eventId, Instant createdAt, PaymentConfirmedEvent confirmed) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("payment_id", confirmed.paymentId());

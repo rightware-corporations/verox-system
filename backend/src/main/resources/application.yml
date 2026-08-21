@@ -32,6 +32,8 @@ management:
         enabled: true
 
 verox:
+  pilot:
+    manual-acceptance-merchant-ids: ${VEROX_PILOT_MANUAL_ACCEPTANCE_MERCHANT_IDS:}
   cors:
     hosted-checkout-allowed-origins: ${VEROX_CORS_HOSTED_CHECKOUT_ALLOWED_ORIGINS:}
   bootstrap:
