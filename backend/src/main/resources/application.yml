@@ -32,6 +32,8 @@ management:
         enabled: true
 
 verox:
+  cors:
+    hosted-checkout-allowed-origins: ${VEROX_CORS_HOSTED_CHECKOUT_ALLOWED_ORIGINS:}
   bootstrap:
     enabled: ${VEROX_BOOTSTRAP_ENABLED:false}
     merchant-name: ${VEROX_BOOTSTRAP_MERCHANT_NAME:VEROX MVP Merchant}
