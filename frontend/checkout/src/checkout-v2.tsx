@@ -22,6 +22,7 @@ type Provider = {
   name: string;
   kind: string;
   monogram: string;
+  logo: string;
   enabled: boolean;
   recipient?: string;
   recipientName?: string;
@@ -36,9 +37,9 @@ const payment = {
 };
 
 const providers: Provider[] = [
-  { id: 'MPESA', name: 'M-Pesa', kind: 'Mobile money', monogram: 'M', enabled: true, recipient: '+258 84 000 0000', status: 'Disponível' },
-  { id: 'EMOLA', name: 'e-Mola', kind: 'Mobile money', monogram: 'e', enabled: false, recipient: '+258 87 557 9796', recipientName: 'Owen de Jesus', status: 'Em preparação' },
-  { id: 'MILLENNIUM_BIM', name: 'Millennium bim', kind: 'Transferência bancária', monogram: 'bim', enabled: false, status: 'Em preparação' },
+  { id: 'MPESA', name: 'M-Pesa', kind: 'Mobile money', monogram: 'M', logo: '/providers/m-pesa.png.png', enabled: true, recipient: '+258 84 000 0000', status: 'Disponível' },
+  { id: 'EMOLA', name: 'e-Mola', kind: 'Mobile money', monogram: 'e', logo: '/providers/e-mola.png.png', enabled: false, recipient: '+258 87 557 9796', recipientName: 'Owen de Jesus', status: 'Em preparação' },
+  { id: 'MILLENNIUM_BIM', name: 'Millennium bim', kind: 'Transferência bancária', monogram: 'bim', logo: '/providers/millennium-bim.png.png', enabled: false, status: 'Em preparação' },
 ];
 
 function Brand({ quiet = false }: { quiet?: boolean }) {
@@ -60,7 +61,8 @@ function TransactionHero() {
 }
 
 function ProviderMark({ provider }: { provider: Provider }) {
-  return <span className={`v2-provider-mark ${provider.id.toLowerCase()}`}>{provider.monogram}</span>;
+  const [failed, setFailed] = useState(false);
+  return <span className={`v2-provider-mark ${provider.id.toLowerCase()}`}>{failed ? provider.monogram : <img src={provider.logo} alt="" aria-hidden="true" onError={()=>setFailed(true)}/>}</span>;
 }
 
 function ProviderCard({provider,active,onSelect}:{provider:Provider;active:boolean;onSelect:()=>void}) {
