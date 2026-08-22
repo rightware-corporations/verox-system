@@ -1,0 +1,69 @@
+/* Final readability and density pass for the Hosted Checkout. */
+
+.v2-shell{max-width:520px}
+.v2-header{height:72px}
+.v2-wordmark strong{font-size:14px}
+.v2-wordmark span{font-size:7px}
+.v2-secure{font-size:11px;font-weight:600}
+.v2-step b{font-size:10px}
+.v2-step span{font-size:10px}
+.v2-content{padding-top:28px}
+.v2-kicker{font-size:10px;letter-spacing:.13em}
+.v2-hero{padding-bottom:26px}
+.v2-hero-meta{font-size:11px}
+.v2-hero h1{font-size:30px;line-height:1.08}
+.v2-money strong{font-size:46px;line-height:.95}
+.v2-money span{font-size:16px;font-weight:700}
+.v2-hero p{font-size:13px;line-height:1.5;max-width:360px;margin-left:auto;margin-right:auto}
+.v2-section-heading h2,.v2-howto h2{font-size:19px}
+.v2-mini-trust{font-size:10px}
+.v2-provider{min-height:72px;padding:14px 15px;border-radius:16px}
+.v2-provider-mark{width:42px;height:42px;border-radius:12px;font-size:15px}
+.v2-provider-copy strong{font-size:15px}
+.v2-provider-copy small{font-size:11px}
+.v2-provider-status{font-size:10px;padding:6px 8px}
+.v2-note,.v2-critical,.v2-privacy,.v2-state-callout{font-size:11px;line-height:1.55;border-radius:12px}
+.v2-primary{min-height:56px;font-size:14px}
+.v2-back{font-size:12px}
+.v2-page-heading h1,.v2-state h1{font-size:29px;line-height:1.08}
+.v2-page-heading p{font-size:13px;line-height:1.55;max-width:390px}
+.v2-pay-card{padding:20px;border-radius:18px}
+.v2-pay-card-brand strong{font-size:13px}
+.v2-pay-card-brand span,.v2-pay-card-top span,.v2-recipient span,.v2-pay-card-ref span{font-size:10px}
+.v2-pay-card-top strong{font-size:30px}
+.v2-recipient strong{font-size:16px}
+.v2-recipient button{font-size:10px;min-height:44px}
+.v2-pay-card-ref strong{font-size:12px}
+.v2-howto-row{grid-template-columns:34px 1fr;gap:11px;padding:12px 0}
+.v2-howto-row>span{width:30px;height:30px;font-size:9px}
+.v2-howto-row strong{font-size:12px}
+.v2-howto-row p{font-size:11px;line-height:1.5}
+.v2-evidence-guide{padding:14px;border-radius:14px}
+.v2-evidence-guide strong{font-size:12px}
+.v2-evidence-guide p{font-size:11px;line-height:1.5}
+.v2-field>span{font-size:12px}
+.v2-field textarea{min-height:210px;font-size:14px;line-height:1.55;border-radius:14px}
+.v2-field-meta small{font-size:10px}
+.v2-state-amount{font-size:30px}
+.v2-state-body{font-size:12px;line-height:1.55;max-width:360px}
+.v2-state-meta span{font-size:9px}
+.v2-state-meta strong{font-size:11px}
+.v2-receipt span,.v2-receipt small{font-size:10px}
+.v2-receipt strong{font-size:11px}
+.v2-footer{font-size:9px}
+
+@media(max-width:389px){
+  .v2-shell{padding-left:16px;padding-right:16px}
+  .v2-hero h1{font-size:27px}
+  .v2-money strong{font-size:40px}
+  .v2-page-heading h1,.v2-state h1{font-size:26px}
+  .v2-provider{padding:12px}
+  .v2-provider-status{font-size:9px}
+  .v2-field textarea{min-height:190px}
+}
+
+@media(min-width:720px){
+  .v2-shell{width:min(100%,520px)}
+  .v2-page{padding:32px}
+  .v2-content{padding-left:4px;padding-right:4px}
+}
