@@ -18,7 +18,10 @@
 .v2-section-heading h2,.v2-howto h2{font-size:19px}
 .v2-mini-trust{font-size:10px}
 .v2-provider{min-height:72px;padding:14px 15px;border-radius:16px}
-.v2-provider-mark{width:42px;height:42px;border-radius:12px;font-size:15px}
+.v2-provider-mark{width:46px;height:46px;border-radius:12px;font-size:15px;background:#fff;overflow:hidden;display:grid;place-items:center;flex:0 0 auto;border:1px solid #edf1f2}
+.v2-provider-mark img{width:100%;height:100%;object-fit:contain;display:block;padding:4px;background:#fff}
+.v2-pay-card .v2-provider-mark{width:48px;height:48px;background:#fff}
+.v2-pay-card .v2-provider-mark img{padding:3px}
 .v2-provider-copy strong{font-size:15px}
 .v2-provider-copy small{font-size:11px}
 .v2-provider-status{font-size:10px;padding:6px 8px}
