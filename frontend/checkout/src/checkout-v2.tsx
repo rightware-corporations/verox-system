@@ -1,117 +1,49 @@
-import React, { useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import {
-  ArrowLeft,
-  Check,
-  CheckCircle2,
-  ChevronRight,
-  CircleAlert,
-  Clock3,
-  Copy,
-  TriangleAlert,
-  WifiOff,
-} from 'lucide-react';
+import React, {useEffect,useMemo,useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {ArrowLeft,Check,CheckCircle2,ChevronRight,CircleAlert,Clock3,Copy,TriangleAlert,WifiOff} from 'lucide-react';
 import './checkout-v2.css';
 import './checkout-v2-tune.css';
+import {checkoutApi,CheckoutApiError,readCheckoutContext} from './checkout-api';
+import type {HostedCheckout,HostedPaymentChannel} from './checkout-api';
 
-type Screen = 'ready' | 'instructions' | 'evidence' | 'verifying' | 'confirmed' | 'review' | 'failed' | 'expired' | 'network' | 'invalid';
-type ProviderId = 'MPESA' | 'EMOLA' | 'MILLENNIUM_BIM';
+type Screen='loading'|'ready'|'instructions'|'evidence'|'verifying'|'confirmed'|'manual'|'review'|'failed'|'expired'|'network'|'invalid';
 
-type Provider = {
-  id: ProviderId;
-  name: string;
-  kind: string;
-  monogram: string;
-  logo: string;
-  enabled: boolean;
-  recipient?: string;
-  recipientName?: string;
-  status: string;
-};
+type ProviderView=HostedPaymentChannel&{logo:string;monogram:string};
 
-const payment = {
-  merchant: 'Mapiko Store',
-  reference: 'ORD-1024',
-  amount: '1 500,00 MZN',
-  checkout: 'cs_demo1024',
-};
+function Brand({quiet=false}:{quiet?:boolean}){return <div className={`v2-brand ${quiet?'quiet':''}`} aria-label="VEROX"><img src="/verox-mark.svg" alt="" aria-hidden="true"/><div className="v2-wordmark"><strong>VEROX</strong>{!quiet&&<span>VERIFIED TRUTH.</span>}</div></div>}
+function AppChrome({children,screen}:{children:React.ReactNode;screen:Screen}){const stage=useMemo(()=>screen==='ready'||screen==='instructions'?1:screen==='evidence'?2:3,[screen]);return <main className="v2-page"><div className="v2-atmosphere" aria-hidden="true"><i/><i/><i/><i/></div><section className="v2-shell"><header className="v2-header"><Brand/><span className="v2-secure">Checkout seguro</span></header><div className="v2-steps" aria-label={`Etapa ${stage} de 3`}>{['Pagamento','Comprovativo','Verificação'].map((label,index)=>{const n=index+1;return <div className={`v2-step ${stage===n?'current':''} ${stage>n?'complete':''}`} key={label}><span>{stage>n?<Check size={12}/>:n}</span><b>{label}</b></div>})}</div><div className="v2-content">{children}</div><footer className="v2-footer"><span>Protegido por</span><Brand quiet/></footer></section></main>}
 
-const providers: Provider[] = [
-  { id: 'MPESA', name: 'M-Pesa', kind: 'Mobile money', monogram: 'M', logo: '/providers/m-pesa.png.png', enabled: true, recipient: '+258 84 000 0000', status: 'Disponível' },
-  { id: 'EMOLA', name: 'e-Mola', kind: 'Mobile money', monogram: 'e', logo: '/providers/e-mola.png.png', enabled: false, recipient: '+258 87 557 9796', recipientName: 'Owen de Jesus', status: 'Em preparação' },
-  { id: 'MILLENNIUM_BIM', name: 'Millennium bim', kind: 'Transferência bancária', monogram: 'bim', logo: '/providers/millennium-bim.png.png', enabled: false, status: 'Em preparação' },
-];
+function providerView(channel:HostedPaymentChannel):ProviderView{const key=channel.provider.toUpperCase();if(key.includes('MPESA')||key.includes('M_PESA'))return{...channel,logo:'/providers/m-pesa.png.png',monogram:'M'};if(key.includes('EMOLA')||key.includes('E_MOLA'))return{...channel,logo:'/providers/e-mola.png.png',monogram:'e'};if(key.includes('MILLENNIUM'))return{...channel,logo:'/providers/millennium-bim.png.png',monogram:'bim'};return{...channel,logo:'',monogram:channel.displayName.slice(0,2)}}
+function ProviderMark({provider}:{provider:ProviderView}){const[failed,setFailed]=useState(!provider.logo);return <span className="v2-provider-mark">{failed?provider.monogram:<img src={provider.logo} alt="" aria-hidden="true" onError={()=>setFailed(true)}/>}</span>}
+function money(checkout:HostedCheckout){return `${checkout.amount} ${checkout.currency}`}
 
-function Brand({ quiet = false }: { quiet?: boolean }) {
-  return <div className={`v2-brand ${quiet ? 'quiet' : ''}`} aria-label="VEROX"><img src="/verox-mark.svg" alt="" aria-hidden="true"/><div className="v2-wordmark"><strong>VEROX</strong>{!quiet && <span>VERIFIED TRUTH.</span>}</div></div>;
-}
+function TransactionHero({checkout}:{checkout:HostedCheckout}){return <section className="v2-hero"><div className="v2-hero-meta"><span>Pagamento para</span><strong>{checkout.externalReference}</strong></div><h1>{checkout.merchantDisplayName}</h1><div className="v2-money"><strong>{checkout.amount}</strong><span>{checkout.currency}</span></div>{checkout.description&&<p>{checkout.description}</p>}</section>}
+function ProviderCard({provider,active,onSelect}:{provider:ProviderView;active:boolean;onSelect:()=>void}){return <button className={`v2-provider ${active?'active':''} ${!provider.enabled?'disabled':''}`} onClick={onSelect} disabled={!provider.enabled} aria-pressed={active} aria-label={`${provider.displayName}, ${provider.enabled?'Disponível':'Indisponível'}`}><ProviderMark provider={provider}/><span className="v2-provider-copy"><strong>{provider.displayName}</strong><small>{provider.kind}</small></span><span className={`v2-provider-status ${provider.enabled?'available':'soon'}`}>{provider.enabled?'Disponível':'Indisponível'}</span>{provider.enabled&&<ChevronRight size={18}/>}</button>}
+function StickyAction({children,disabled,onClick}:{children:React.ReactNode;disabled?:boolean;onClick:()=>void}){return <div className="v2-action-dock"><button className="v2-primary" disabled={disabled} onClick={onClick}>{children}<ChevronRight size={18}/></button></div>}
+function Back({onClick,children}:{onClick:()=>void;children:React.ReactNode}){return <button className="v2-back" onClick={onClick}><ArrowLeft size={16}/>{children}</button>}
 
-function AppChrome({ children, screen }: { children: React.ReactNode; screen: Screen }) {
-  const stage = useMemo(() => screen === 'ready' || screen === 'instructions' ? 1 : screen === 'evidence' ? 2 : 3, [screen]);
-  return <main className="v2-page"><div className="v2-atmosphere" aria-hidden="true"><i/><i/><i/><i/></div><section className="v2-shell">
-    <header className="v2-header"><Brand/><span className="v2-secure">Checkout seguro</span></header>
-    <div className="v2-steps" aria-label={`Etapa ${stage} de 3`}>{['Pagamento','Comprovativo','Verificação'].map((label,index)=>{const n=index+1;return <div className={`v2-step ${stage===n?'current':''} ${stage>n?'complete':''}`} key={label}><span>{stage>n?<Check size={12}/>:n}</span><b>{label}</b></div>})}</div>
-    <div className="v2-content">{children}</div>
-    <footer className="v2-footer"><span>Protegido por</span><Brand quiet/></footer>
-  </section></main>;
-}
+function Ready({checkout,providers,selected,onSelect,onContinue}:{checkout:HostedCheckout;providers:ProviderView[];selected:string;onSelect:(id:string)=>void;onContinue:()=>void}){return <><TransactionHero checkout={checkout}/><section className="v2-section"><div className="v2-section-heading"><div><span className="v2-kicker">Método de pagamento</span><h2>Como pretende pagar?</h2></div><span className="v2-mini-trust">Canais VEROX</span></div><div className="v2-provider-list">{providers.map(provider=><ProviderCard key={provider.provider} provider={provider} active={selected===provider.provider} onSelect={()=>onSelect(provider.provider)}/>)}</div><div className="v2-note"><p>Apenas os métodos autorizados pelo VEROX Server para este checkout são apresentados como disponíveis.</p></div></section><StickyAction disabled={!selected} onClick={onContinue}>Continuar</StickyAction></>}
 
-function TransactionHero() {
-  return <section className="v2-hero"><div className="v2-hero-meta"><span>Pagamento para</span><strong>{payment.reference}</strong></div><h1>{payment.merchant}</h1><div className="v2-money"><strong>1 500,00</strong><span>MZN</span></div><p>Escolha o método de pagamento e siga as instruções apresentadas.</p></section>;
-}
+function PaymentInstructions({checkout,provider,onBack,onPaid}:{checkout:HostedCheckout;provider:ProviderView;onBack:()=>void;onPaid:()=>void}){const[copied,setCopied]=useState(false);const copy=async()=>{if(!provider.recipientDisplay)return;try{await navigator.clipboard.writeText(provider.recipientDisplay);setCopied(true);setTimeout(()=>setCopied(false),1500)}catch{setCopied(false)}};return <><Back onClick={onBack}>Voltar</Back><div className="v2-page-heading"><span className="v2-kicker">{provider.displayName}</span><h1>Conclua o pagamento</h1><p>Use exatamente os dados apresentados pelo VEROX Server e regresse após receber a mensagem oficial.</p></div><section className="v2-pay-card"><div className="v2-pay-card-brand"><ProviderMark provider={provider}/><div><strong>{provider.displayName}</strong><span>{provider.kind}</span></div></div><div className="v2-pay-card-top"><span>Valor a enviar</span><strong>{money(checkout)}</strong></div>{provider.recipientDisplay&&<div className="v2-recipient"><div><span>Destino</span><strong>{provider.recipientDisplay}</strong>{provider.recipientName&&<small>{provider.recipientName}</small>}</div><button onClick={copy} aria-label="Copiar destino"><Copy size={17}/><span>{copied?'Copiado':'Copiar'}</span></button></div>}<div className="v2-pay-card-ref"><span>Referência VEROX</span><strong>{checkout.externalReference}</strong></div></section>{provider.instructions&&<section className="v2-howto"><h2>Instruções</h2><div className="v2-howto-row"><span>01</span><div><strong>Siga as instruções do canal</strong><p>{provider.instructions}</p></div></div><div className="v2-howto-row"><span>02</span><div><strong>Aguarde a confirmação oficial</strong><p>Não avance antes de receber a mensagem completa do provedor.</p></div></div><div className="v2-howto-row"><span>03</span><div><strong>Regresse à VEROX</strong><p>No próximo passo irá colar a mensagem oficial completa.</p></div></div></section>}<div className="v2-critical"><p><strong>Importante:</strong> guarde a mensagem completa e não reconstrua o conteúdo manualmente.</p></div><StickyAction onClick={onPaid}>Já efectuei o pagamento</StickyAction></>}
 
-function ProviderMark({ provider }: { provider: Provider }) {
-  const [failed, setFailed] = useState(false);
-  return <span className={`v2-provider-mark ${provider.id.toLowerCase()}`}>{failed ? provider.monogram : <img src={provider.logo} alt="" aria-hidden="true" onError={()=>setFailed(true)}/>}</span>;
-}
-
-function ProviderCard({provider,active,onSelect}:{provider:Provider;active:boolean;onSelect:()=>void}) {
-  return <button className={`v2-provider ${active?'active':''} ${!provider.enabled?'disabled':''}`} onClick={onSelect} disabled={!provider.enabled} aria-pressed={active} aria-label={`${provider.name}, ${provider.status}`}>
-    <ProviderMark provider={provider}/><span className="v2-provider-copy"><strong>{provider.name}</strong><small>{provider.kind}</small></span><span className={`v2-provider-status ${provider.enabled?'available':'soon'}`}>{provider.status}</span>{provider.enabled&&<ChevronRight size={18}/>} 
-  </button>;
-}
-
-function StickyAction({children,disabled,onClick}:{children:React.ReactNode;disabled?:boolean;onClick:()=>void}) {
-  return <div className="v2-action-dock"><button className="v2-primary" disabled={disabled} onClick={onClick}>{children}<ChevronRight size={18}/></button></div>;
-}
-
-function CheckoutReady({onContinue}:{onContinue:()=>void}) {
-  const [provider,setProvider]=useState<ProviderId>('MPESA');
-  return <><TransactionHero/><section className="v2-section"><div className="v2-section-heading"><div><span className="v2-kicker">Método de pagamento</span><h2>Como pretende pagar?</h2></div><span className="v2-mini-trust">Canais VEROX</span></div><div className="v2-provider-list">{providers.map(p=><ProviderCard key={p.id} provider={p} active={provider===p.id} onSelect={()=>setProvider(p.id)}/>)}</div><div className="v2-note"><p>Os métodos só ficam disponíveis quando o VEROX Server os autoriza para este checkout.</p></div></section><StickyAction onClick={onContinue}>Continuar com M-Pesa</StickyAction></>;
-}
-
-function PaymentInstructions({onBack,onPaid}:{onBack:()=>void;onPaid:()=>void}) {
-  const provider=providers[0]; const [copied,setCopied]=useState(false);
-  const copy=async()=>{try{await navigator.clipboard.writeText(provider.recipient||'');setCopied(true);setTimeout(()=>setCopied(false),1500)}catch{setCopied(false)}};
-  return <><Back onClick={onBack}>Voltar</Back><div className="v2-page-heading"><span className="v2-kicker">M-Pesa</span><h1>Faça o pagamento no seu telemóvel</h1><p>Use exatamente os dados apresentados abaixo e regresse à VEROX depois de receber a mensagem oficial.</p></div>
-  <section className="v2-pay-card"><div className="v2-pay-card-brand"><ProviderMark provider={provider}/><div><strong>{provider.name}</strong><span>{provider.kind}</span></div></div><div className="v2-pay-card-top"><span>Valor a enviar</span><strong>{payment.amount}</strong></div><div className="v2-recipient"><div><span>Número receptor</span><strong>{provider.recipient}</strong></div><button onClick={copy} aria-label="Copiar número"><Copy size={17}/><span>{copied?'Copiado':'Copiar'}</span></button></div><div className="v2-pay-card-ref"><span>Referência VEROX</span><strong>{payment.reference}</strong></div></section>
-  <section className="v2-howto"><h2>Concluir em três passos</h2>{[['01','Envie o valor exato','Envie exatamente 1 500,00 MZN para o número indicado.'],['02','Aguarde a mensagem oficial','Não avance antes de receber a confirmação completa do M-Pesa.'],['03','Regresse à VEROX','No próximo passo irá colar a mensagem oficial completa.']].map(([n,t,d])=><div className="v2-howto-row" key={n}><span>{n}</span><div><strong>{t}</strong><p>{d}</p></div></div>)}</section><div className="v2-critical"><p><strong>Importante:</strong> guarde a mensagem completa. Não altere valores, referência, telefone ou data.</p></div><StickyAction onClick={onPaid}>Já efectuei o pagamento</StickyAction></>;
-}
-
-function Evidence({onBack,onSubmit}:{onBack:()=>void;onSubmit:()=>void}) {
-  const [value,setValue]=useState(''); const max=4096;
-  return <><Back onClick={onBack}>Instruções de pagamento</Back><div className="v2-page-heading"><span className="v2-kicker">Comprovativo</span><h1>Confirmar pagamento</h1><p>Cole abaixo a mensagem completa de confirmação recebida após efectuar o pagamento.</p></div><div className="v2-evidence-guide"><div><strong>Uma mensagem. Sem reconstrução manual.</strong><p>A VEROX envia a evidência completa ao servidor para verificação.</p></div></div><label className="v2-field"><span>Mensagem de confirmação</span><textarea value={value} maxLength={max} onChange={e=>setValue(e.target.value)} placeholder="Cole aqui a mensagem completa de confirmação." autoComplete="off" spellCheck={false}/><div className="v2-field-meta"><small>Não edite nem reconstrua a mensagem.</small><small>{value.length}/{max}</small></div></label><div className="v2-privacy"><span>A evidência é usada apenas para o fluxo de verificação do pagamento.</span></div><StickyAction disabled={!value.trim()} onClick={onSubmit}>Verificar pagamento</StickyAction></>;
-}
+function Evidence({onBack,onSubmit,busy,error}:{onBack:()=>void;onSubmit:(value:string)=>void;busy:boolean;error:string|null}){const[value,setValue]=useState('');const max=4096;return <><Back onClick={onBack}>Instruções de pagamento</Back><div className="v2-page-heading"><span className="v2-kicker">Comprovativo</span><h1>Confirmar pagamento</h1><p>Cole abaixo a mensagem completa de confirmação recebida após efectuar o pagamento.</p></div><div className="v2-evidence-guide"><div><strong>Uma mensagem. Sem reconstrução manual.</strong><p>A VEROX envia a evidência completa ao servidor para verificação.</p></div></div><label className="v2-field"><span>Mensagem de confirmação</span><textarea value={value} maxLength={max} onChange={e=>setValue(e.target.value)} placeholder="Cole aqui a mensagem completa de confirmação." autoComplete="off" spellCheck={false}/><div className="v2-field-meta"><small>Não edite nem reconstrua a mensagem.</small><small>{value.length}/{max}</small></div></label>{error&&<div className="v2-state-callout warning"><span>{error}</span></div>}<div className="v2-privacy"><span>A evidência é usada apenas para o fluxo de verificação do pagamento.</span></div><StickyAction disabled={busy||!value.trim()} onClick={()=>onSubmit(value)}>{busy?'A enviar…':'Verificar pagamento'}</StickyAction></>}
 
 function VerificationLoader(){return <div className="v2-verification-loader" role="status" aria-label="Verificação em curso"><svg viewBox="0 0 160 120" aria-hidden="true"><path className="vl-frame" d="M33 25h58v70H33z"/><path className="vl-core" d="M61 43l20 12v24L61 91 41 79V55z"/><circle className="vl-node n1" cx="119" cy="30" r="4"/><circle className="vl-node n2" cx="132" cy="57" r="4"/><circle className="vl-node n3" cx="116" cy="89" r="4"/><path className="vl-line l1" d="M91 42l24-10"/><path className="vl-line l2" d="M91 60l36-2"/><path className="vl-line l3" d="M91 79l22 9"/></svg></div>}
+function StateScreen({checkout,provider,tone,icon,title,headline,body,children,action,onAction}:{checkout:HostedCheckout;provider?:ProviderView;tone:string;icon?:React.ReactNode;title:string;headline:string;body:string;children?:React.ReactNode;action?:string;onAction?:()=>void}){return <div className={`v2-state ${tone}`}>{icon&&<div className="v2-state-icon">{icon}</div>}<span className="v2-kicker">{title}</span><h1>{headline}</h1><div className="v2-state-amount">{money(checkout)}</div><p className="v2-state-body">{body}</p><div className="v2-state-meta"><div><span>Comerciante</span><strong>{checkout.merchantDisplayName}</strong></div><div><span>Método</span><strong>{provider?.displayName??'—'}</strong></div><div><span>Referência</span><strong>{checkout.externalReference}</strong></div></div>{children}{action&&<StickyAction onClick={onAction||(()=>{})}>{action}</StickyAction>}</div>}
+function BasicState({tone='neutral',icon,title,headline,body,action,onAction}:{tone?:string;icon:React.ReactNode;title:string;headline:string;body:string;action?:string;onAction?:()=>void}){return <div className={`v2-state ${tone}`}><div className="v2-state-icon">{icon}</div><span className="v2-kicker">{title}</span><h1>{headline}</h1><p className="v2-state-body">{body}</p>{action&&<StickyAction onClick={onAction||(()=>{})}>{action}</StickyAction>}</div>}
 
-function StateScreen({tone,icon,title,headline,body,children,action,onAction}:{tone:string;icon?:React.ReactNode;title:string;headline:string;body:string;children?:React.ReactNode;action?:string;onAction?:()=>void}) {
-  return <div className={`v2-state ${tone}`}>{icon&&<div className="v2-state-icon">{icon}</div>}<span className="v2-kicker">{title}</span><h1>{headline}</h1><div className="v2-state-amount">{payment.amount}</div><p className="v2-state-body">{body}</p><div className="v2-state-meta"><div><span>Comerciante</span><strong>{payment.merchant}</strong></div><div><span>Método</span><strong>M-Pesa</strong></div><div><span>Referência</span><strong>{payment.reference}</strong></div></div>{children}{action&&<StickyAction onClick={onAction||(()=>{})}>{action}</StickyAction>}</div>;
-}
+function statusScreen(checkout:HostedCheckout):Screen{if(checkout.checkoutStatus==='EXPIRED'||checkout.effectivePaymentStatus==='EXPIRED')return'expired';if(checkout.effectivePaymentStatus==='CONFIRMED')return'confirmed';if(checkout.effectivePaymentStatus==='MANUALLY_ACCEPTED')return'manual';if(checkout.effectivePaymentStatus==='REVIEW_REQUIRED')return'review';if(checkout.effectivePaymentStatus==='FAILED')return'failed';if(checkout.effectivePaymentStatus==='VERIFYING')return'verifying';return'ready'}
 
-function Back({onClick,children}:{onClick:()=>void;children:React.ReactNode}) {return <button className="v2-back" onClick={onClick}><ArrowLeft size={16}/>{children}</button>}
-
-function App(){const[screen,setScreen]=useState<Screen>('ready');const[devOpen,setDevOpen]=useState(false);let content:React.ReactNode;switch(screen){
-case'ready':content=<CheckoutReady onContinue={()=>setScreen('instructions')}/>;break;
-case'instructions':content=<PaymentInstructions onBack={()=>setScreen('ready')} onPaid={()=>setScreen('evidence')}/>;break;
-case'evidence':content=<Evidence onBack={()=>setScreen('instructions')} onSubmit={()=>setScreen('verifying')}/>;break;
-case'verifying':content=<StateScreen tone="info" icon={<VerificationLoader/>} title="Verificação em curso" headline="Estamos a verificar o seu pagamento" body="Recebemos a confirmação e estamos a validar a transacção."><div className="v2-state-callout info"><span>Não precisa de enviar a mensagem novamente. O pagamento ainda não está confirmado.</span></div></StateScreen>;break;
-case'confirmed':content=<StateScreen tone="success" icon={<CheckCircle2/>} title="Verificação concluída" headline="Pagamento confirmado" body="O seu pagamento foi verificado pela VEROX." action={`Voltar à ${payment.merchant}`}><div className="v2-receipt"><span>VEROX verification</span><strong>Confirmed</strong><small>{payment.checkout}</small></div></StateScreen>;break;
-case'review':content=<StateScreen tone="warning" icon={<TriangleAlert/>} title="Revisão necessária" headline="Estamos a analisar o seu pagamento" body="Recebemos a informação, mas ainda não é seguro declarar o pagamento confirmado."><div className="v2-state-callout warning"><strong>Não efectue outro pagamento.</strong><span>A transacção pode já ter sido efectuada.</span></div></StateScreen>;break;
-case'failed':content=<StateScreen tone="danger" icon={<CircleAlert/>} title="Não verificado" headline="Não foi possível verificar este pagamento" body="A VEROX não tem confirmação suficiente para declarar este pagamento como concluído." action="Tentar novamente" onAction={()=>setScreen('evidence')}/>;break;
-case'expired':content=<StateScreen tone="neutral" icon={<Clock3/>} title="Checkout expirado" headline="Este checkout já não está activo" body="A sessão terminou e já não pode receber uma nova submissão de evidência." action="Voltar ao comerciante"/>;break;
-case'network':content=<StateScreen tone="neutral" icon={<WifiOff/>} title="Ligação indisponível" headline="Não foi possível contactar a VEROX" body="O estado do seu pagamento não foi alterado. Quando recuperar a ligação, pode tentar novamente." action="Tentar novamente" onAction={()=>setScreen('verifying')}/>;break;
-default:content=<StateScreen tone="neutral" icon={<CircleAlert/>} title="Checkout indisponível" headline="Este link não está disponível" body="O checkout pode ser inválido, ter expirado ou já não estar acessível."/>}
-return <><AppChrome screen={screen}>{content}</AppChrome>{import.meta.env.DEV&&<div className={`v2-dev ${devOpen?'open':''}`}><button className="v2-dev-trigger" onClick={()=>setDevOpen(v=>!v)}>DEV</button>{devOpen&&<div className="v2-dev-menu"><strong>Preview state</strong>{(['ready','instructions','evidence','verifying','confirmed','review','failed','expired','network','invalid'] as Screen[]).map(s=><button key={s} className={screen===s?'active':''} onClick={()=>{setScreen(s);setDevOpen(false)}}>{s}</button>)}</div>}</div>}</>}
-
+function App(){const[{checkoutSessionId,capability}]=useState(readCheckoutContext);const[checkout,setCheckout]=useState<HostedCheckout|null>(null);const[screen,setScreen]=useState<Screen>('loading');const[selected,setSelected]=useState('');const[evidenceBusy,setEvidenceBusy]=useState(false);const[evidenceError,setEvidenceError]=useState<string|null>(null);const[networkError,setNetworkError]=useState(false);
+const bootstrap=React.useCallback(async(showNetwork=true)=>{if(!checkoutSessionId||!capability){setScreen('invalid');return null}try{const data=await checkoutApi.bootstrap(checkoutSessionId,capability);setCheckout(data);setNetworkError(false);const enabled=data.paymentChannels.filter(channel=>channel.enabled);setSelected(current=>current&&enabled.some(channel=>channel.provider===current)?current:(enabled[0]?.provider||''));const authoritative=statusScreen(data);if(['confirmed','manual','review','failed','expired','verifying'].includes(authoritative))setScreen(authoritative);else if(screen==='loading'||screen==='network'||screen==='invalid')setScreen('ready');return data}catch(error){if(error instanceof CheckoutApiError&&error.status===0){setNetworkError(true);if(showNetwork)setScreen('network')}else setScreen('invalid');return null}},[checkoutSessionId,capability,screen]);
+useEffect(()=>{bootstrap()},[]);
+useEffect(()=>{if(screen!=='verifying')return;const timer=window.setInterval(()=>bootstrap(false),2500);return()=>window.clearInterval(timer)},[screen,bootstrap]);
+const providers=useMemo(()=>checkout?.paymentChannels.filter(channel=>channel.enabled).map(providerView)??[],[checkout]);const provider=providers.find(item=>item.provider===selected);
+async function submitEvidence(value:string){if(!checkout||!capability)return;setEvidenceBusy(true);setEvidenceError(null);try{await checkoutApi.submitEvidence(checkout.checkoutSessionId,capability,value.trim());setScreen('verifying');await bootstrap(false)}catch(error){if(error instanceof CheckoutApiError&&error.status===0){setNetworkError(true);setScreen('network')}else setEvidenceError(error instanceof Error?error.message:'Não foi possível enviar o comprovativo.')}finally{setEvidenceBusy(false)}}
+if(screen==='loading')return <AppChrome screen="verifying"><BasicState icon={<VerificationLoader/>} title="Checkout VEROX" headline="A carregar checkout" body="Estamos a obter os dados autorizados pelo VEROX Server."/></AppChrome>;
+if(screen==='invalid')return <AppChrome screen="invalid"><BasicState icon={<CircleAlert/>} title="Checkout indisponível" headline="Este link não está disponível" body="O checkout pode ser inválido, ter expirado ou a capability não ser válida."/></AppChrome>;
+if(screen==='network'||!checkout)return <AppChrome screen="network"><BasicState icon={<WifiOff/>} title="Ligação indisponível" headline="Não foi possível contactar a VEROX" body="O estado do seu pagamento não foi alterado." action="Tentar novamente" onAction={()=>bootstrap()}/></AppChrome>;
+let content:React.ReactNode;
+switch(screen){case'ready':content=<Ready checkout={checkout} providers={providers} selected={selected} onSelect={setSelected} onContinue={()=>provider&&setScreen('instructions')}/>;break;case'instructions':content=provider?<PaymentInstructions checkout={checkout} provider={provider} onBack={()=>setScreen('ready')} onPaid={()=>setScreen('evidence')}/>:<BasicState icon={<CircleAlert/>} title="Método indisponível" headline="Nenhum método de pagamento está disponível" body="O VEROX Server não disponibilizou um canal activo para este checkout."/>;break;case'evidence':content=<Evidence onBack={()=>setScreen('instructions')} onSubmit={submitEvidence} busy={evidenceBusy} error={evidenceError}/>;break;case'verifying':content=<StateScreen checkout={checkout} provider={provider} tone="info" icon={<VerificationLoader/>} title="Verificação em curso" headline="Estamos a verificar o seu pagamento" body="Recebemos a confirmação e estamos a validar a transacção."><div className="v2-state-callout info"><span>Não precisa de enviar a mensagem novamente. O pagamento ainda não está confirmado.</span></div></StateScreen>;break;case'confirmed':content=<StateScreen checkout={checkout} provider={provider} tone="success" icon={<CheckCircle2/>} title="Verificação concluída" headline="Pagamento confirmado" body="O seu pagamento foi verificado pela VEROX." action="Voltar ao comerciante" onAction={()=>window.location.assign(checkout.successUrl)}/>;break;case'manual':content=<StateScreen checkout={checkout} provider={provider} tone="warning" icon={<CheckCircle2/>} title="Aceitação manual" headline="Pagamento aceite manualmente" body="A VEROX registou uma aceitação manual autorizada. Este resultado não representa verificação automática." action="Voltar ao comerciante" onAction={()=>window.location.assign(checkout.successUrl)}><div className="v2-state-callout warning"><span>Proveniência preservada: effective status MANUALLY_ACCEPTED.</span></div></StateScreen>;break;case'review':content=<StateScreen checkout={checkout} provider={provider} tone="warning" icon={<TriangleAlert/>} title="Revisão necessária" headline="Estamos a analisar o seu pagamento" body="Recebemos a informação, mas ainda não é seguro declarar o pagamento confirmado."><div className="v2-state-callout warning"><strong>Não efectue outro pagamento.</strong><span>A transacção pode já ter sido efectuada.</span></div></StateScreen>;break;case'failed':content=<StateScreen checkout={checkout} provider={provider} tone="danger" icon={<CircleAlert/>} title="Não verificado" headline="Não foi possível verificar este pagamento" body="O VEROX Server devolveu o estado FAILED para este pagamento." action="Voltar ao comerciante" onAction={()=>window.location.assign(checkout.cancelUrl)}/>;break;case'expired':content=<StateScreen checkout={checkout} provider={provider} tone="neutral" icon={<Clock3/>} title="Checkout expirado" headline="Este checkout já não está activo" body="A sessão terminou e já não pode receber uma nova submissão de evidência." action="Voltar ao comerciante" onAction={()=>window.location.assign(checkout.cancelUrl)}/>;break;default:content=null}
+return <AppChrome screen={screen}>{content}{networkError&&screen!=='network'&&<div className="v2-state-callout warning"><span>A ligação ao servidor foi interrompida. Nenhum estado de pagamento foi inferido localmente.</span></div>}</AppChrome>}
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
