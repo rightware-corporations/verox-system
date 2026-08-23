@@ -1,6 +1,8 @@
 package com.rightware.verox.pilot.application;
 
+import com.rightware.verox.authentication.application.MerchantOperatorPrincipal;
 import com.rightware.verox.authentication.application.MerchantPrincipal;
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.common.web.ApiException;
 import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.domain.PaymentStatus;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Service
 public class PilotManualPaymentAcceptanceService {
@@ -41,17 +44,54 @@ public class PilotManualPaymentAcceptanceService {
         String paymentPublicId,
         String reason
     ) {
-        requirePilotAccess(principal);
+        requirePilotAccess(principal.merchantId());
+        Payment payment = findScopedPayment(principal.merchantId(), principal.environment(), paymentPublicId);
+        return acceptScoped(payment, principal.merchantId(), principal.apiKeyId(), null, reason);
+    }
 
-        Payment payment = findScopedPayment(principal, paymentPublicId);
+    @Transactional
+    public PilotManualPaymentAcceptanceView accept(
+        MerchantOperatorPrincipal principal,
+        String paymentPublicId,
+        String reason
+    ) {
+        requirePilotAccess(principal.merchantId());
+        Payment payment = findScopedPayment(principal.merchantId(), principal.environment(), paymentPublicId);
+        return acceptScoped(payment, principal.merchantId(), null, principal.operatorId(), reason);
+    }
 
+    @Transactional(readOnly = true)
+    public PilotManualPaymentAcceptanceView get(
+        MerchantPrincipal principal,
+        String paymentPublicId
+    ) {
+        requirePilotAccess(principal.merchantId());
+        Payment payment = findScopedPayment(principal.merchantId(), principal.environment(), paymentPublicId);
+        return getExisting(payment, principal.merchantId());
+    }
+
+    @Transactional(readOnly = true)
+    public PilotManualPaymentAcceptanceView get(
+        MerchantOperatorPrincipal principal,
+        String paymentPublicId
+    ) {
+        requirePilotAccess(principal.merchantId());
+        Payment payment = findScopedPayment(principal.merchantId(), principal.environment(), paymentPublicId);
+        return getExisting(payment, principal.merchantId());
+    }
+
+    private PilotManualPaymentAcceptanceView acceptScoped(
+        Payment payment,
+        UUID merchantId,
+        UUID apiKeyId,
+        UUID operatorId,
+        String reason
+    ) {
         PilotManualPaymentAcceptance existing = acceptanceRepository
-            .findByPaymentIdAndMerchantId(payment.getId(), principal.merchantId())
+            .findByPaymentIdAndMerchantId(payment.getId(), merchantId)
             .orElse(null);
 
-        if (existing != null) {
-            return toView(payment, existing);
-        }
+        if (existing != null) return toView(payment, existing);
 
         if (payment.getStatus() != PaymentStatus.PENDING
             && payment.getStatus() != PaymentStatus.REVIEW_REQUIRED) {
@@ -62,17 +102,13 @@ public class PilotManualPaymentAcceptanceService {
             );
         }
 
-        PilotManualPaymentAcceptance acceptance = new PilotManualPaymentAcceptance(
-            payment.getId(),
-            principal.merchantId(),
-            principal.apiKeyId(),
-            reason
-        );
+        PilotManualPaymentAcceptance acceptance = operatorId == null
+            ? new PilotManualPaymentAcceptance(payment.getId(), merchantId, apiKeyId, reason)
+            : PilotManualPaymentAcceptance.acceptedByOperator(payment.getId(), merchantId, operatorId, reason);
 
         acceptance = acceptanceRepository.save(acceptance);
-
         eventPublisher.publishEvent(new PaymentManuallyAcceptedEvent(
-            principal.merchantId(),
+            merchantId,
             payment.getPublicId(),
             payment.getCheckoutSession().getPublicId(),
             payment.getCheckoutSession().getExternalReference(),
@@ -81,31 +117,22 @@ public class PilotManualPaymentAcceptanceService {
             payment.getStatus().name(),
             acceptance.getAcceptedAt()
         ));
-
         return toView(payment, acceptance);
     }
 
-    @Transactional(readOnly = true)
-    public PilotManualPaymentAcceptanceView get(
-        MerchantPrincipal principal,
-        String paymentPublicId
-    ) {
-        requirePilotAccess(principal);
-        Payment payment = findScopedPayment(principal, paymentPublicId);
-
+    private PilotManualPaymentAcceptanceView getExisting(Payment payment, UUID merchantId) {
         PilotManualPaymentAcceptance acceptance = acceptanceRepository
-            .findByPaymentIdAndMerchantId(payment.getId(), principal.merchantId())
+            .findByPaymentIdAndMerchantId(payment.getId(), merchantId)
             .orElseThrow(() -> new ApiException(
                 HttpStatus.NOT_FOUND,
                 "PILOT_MANUAL_ACCEPTANCE_NOT_FOUND",
                 "Manual acceptance was not found"
             ));
-
         return toView(payment, acceptance);
     }
 
-    private void requirePilotAccess(MerchantPrincipal principal) {
-        if (principal == null || !accessPolicy.isAllowed(principal.merchantId())) {
+    private void requirePilotAccess(UUID merchantId) {
+        if (merchantId == null || !accessPolicy.isAllowed(merchantId)) {
             throw new ApiException(
                 HttpStatus.FORBIDDEN,
                 "PILOT_MANUAL_ACCEPTANCE_FORBIDDEN",
@@ -114,23 +141,22 @@ public class PilotManualPaymentAcceptanceService {
         }
     }
 
-    private Payment findScopedPayment(MerchantPrincipal principal, String paymentPublicId) {
+    private Payment findScopedPayment(UUID merchantId, ApiKeyEnvironment environment, String paymentPublicId) {
         Payment payment = paymentRepository
-            .findByPublicIdAndMerchantId(paymentPublicId, principal.merchantId())
+            .findByPublicIdAndMerchantId(paymentPublicId, merchantId)
             .orElseThrow(() -> new ApiException(
                 HttpStatus.NOT_FOUND,
                 "PAYMENT_NOT_FOUND",
                 "Payment was not found"
             ));
 
-        if (payment.getEnvironment() != principal.environment()) {
+        if (payment.getEnvironment() != environment) {
             throw new ApiException(
                 HttpStatus.NOT_FOUND,
                 "PAYMENT_NOT_FOUND",
                 "Payment was not found"
             );
         }
-
         return payment;
     }
 
