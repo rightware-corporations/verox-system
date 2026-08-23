@@ -34,7 +34,9 @@ public class MerchantOperatorSessionFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        return !uri.startsWith(PLATFORM_PREFIX) || LOGIN_PATH.equals(uri);
+        return "OPTIONS".equalsIgnoreCase(request.getMethod())
+            || !uri.startsWith(PLATFORM_PREFIX)
+            || LOGIN_PATH.equals(uri);
     }
 
     @Override
