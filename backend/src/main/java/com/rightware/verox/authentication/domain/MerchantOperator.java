@@ -3,6 +3,7 @@ package com.rightware.verox.authentication.domain;
 import com.rightware.verox.merchant.domain.Merchant;
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -28,6 +29,22 @@ public class MerchantOperator {
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
 
     protected MerchantOperator() {}
+
+    public MerchantOperator(
+        Merchant merchant,
+        ApiKeyEnvironment environment,
+        String username,
+        String displayName,
+        String passwordHash
+    ) {
+        this.id = UUID.randomUUID();
+        this.merchant = merchant;
+        this.environment = environment;
+        this.username = username.trim().toLowerCase(Locale.ROOT);
+        this.displayName = displayName.trim();
+        this.passwordHash = passwordHash;
+        this.status = MerchantOperatorStatus.ACTIVE;
+    }
 
     @PrePersist void prePersist() {
         Instant now = Instant.now();
