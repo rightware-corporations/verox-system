@@ -1,6 +1,7 @@
 package com.rightware.verox.common.config;
 
 import com.rightware.verox.authentication.web.ApiKeyAuthenticationFilter;
+import com.rightware.verox.authentication.web.MerchantOperatorSessionFilter;
 import com.rightware.verox.bridge.web.BridgeAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -23,6 +24,7 @@ public class SecurityConfig {
         HttpSecurity http,
         ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
         BridgeAuthenticationFilter bridgeAuthenticationFilter,
+        MerchantOperatorSessionFilter merchantOperatorSessionFilter,
         CorsConfigurationSource corsConfigurationSource
     ) throws Exception {
         http
@@ -46,10 +48,13 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/public/**").permitAll()
+                .requestMatchers("/platform/v1/auth/login").permitAll()
+                .requestMatchers("/platform/v1/**").hasRole("OPERATOR")
                 .requestMatchers("/v1/bridges/**").hasRole("BRIDGE")
                 .requestMatchers("/v1/**").hasRole("MERCHANT")
                 .anyRequest().denyAll()
             )
+            .addFilterBefore(merchantOperatorSessionFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(bridgeAuthenticationFilter, ApiKeyAuthenticationFilter.class);
 
