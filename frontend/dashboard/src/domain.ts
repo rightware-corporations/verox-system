@@ -9,18 +9,17 @@ export type PaymentCoreState =
   | 'EXPIRED';
 
 export type PaymentEffectiveState = PaymentCoreState | 'MANUALLY_ACCEPTED';
-export type CheckoutState = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+export type PaymentChannelStatus = 'ACTIVE' | 'INACTIVE';
 
-export type MerchantAccount = {
+export type OperatorSession = {
+  operatorId: string;
+  operatorDisplayName: string;
   merchantId: string;
   merchantName: string;
   environment: Environment;
 };
 
-export type MerchantContext = MerchantAccount & {
-  displayBrand?: string;
-  primaryContact?: string;
-};
+export type MerchantAccount = OperatorSession;
 
 export type Payment = {
   id: string;
@@ -35,17 +34,25 @@ export type Payment = {
   manuallyAcceptedAt: string | null;
 };
 
-export type CheckoutSession = {
-  id: string;
-  paymentId: string;
-  externalReference: string;
-  status: CheckoutState;
-  paymentStatus: PaymentCoreState;
-  amount: string;
-  currency: string;
+export type PaymentListItem = Payment & {
   description: string | null;
-  checkoutUrl: string;
-  expiresAt: string;
+  attentionRequired: boolean;
+  createdAt: string;
+};
+
+export type PaymentPage = {
+  items: PaymentListItem[];
+  page: number;
+  size: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+export type PaymentFeedQuery = {
+  status?: PaymentCoreState | PaymentEffectiveState;
+  attentionRequired?: boolean;
+  page?: number;
+  size?: number;
 };
 
 export type ManualAcceptance = {
@@ -55,9 +62,15 @@ export type ManualAcceptance = {
   acceptedAt: string;
 };
 
-export type OperationalCapability = {
-  canUsePilotManualAcceptance: boolean;
-  source: 'SERVER_CONFIGURATION' | 'UNAVAILABLE';
+export type PaymentChannel = {
+  provider: string;
+  displayName: string;
+  kind: string;
+  status: PaymentChannelStatus;
+  recipientDisplay: string | null;
+  recipientName: string | null;
+  instructions: string | null;
+  updatedAt: string;
 };
 
 export type PaymentSemantic = {
@@ -78,8 +91,8 @@ export function paymentSemantic(status: PaymentEffectiveState): PaymentSemantic 
   }
 }
 
-export function canAcceptManually(payment: Payment, capability: OperationalCapability): boolean {
-  if (!capability.canUsePilotManualAcceptance) return false;
+export function canAcceptManually(payment: Payment): boolean {
   if (payment.effectiveStatus === 'MANUALLY_ACCEPTED') return false;
+  if (payment.status === 'CONFIRMED') return false;
   return payment.status === 'PENDING' || payment.status === 'REVIEW_REQUIRED';
 }
