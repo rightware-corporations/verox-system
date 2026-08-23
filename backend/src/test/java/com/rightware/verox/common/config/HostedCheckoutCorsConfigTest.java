@@ -14,7 +14,8 @@ class HostedCheckoutCorsConfigTest {
     void allowsOnlyConfiguredHostedCheckoutOrigin() {
         HostedCheckoutCorsConfig config = new HostedCheckoutCorsConfig();
         CorsConfigurationSource source = config.corsConfigurationSource(
-            "https://checkout.verox.example"
+            "https://checkout.verox.example",
+            ""
         );
 
         MockHttpServletRequest request = new MockHttpServletRequest(
@@ -32,9 +33,31 @@ class HostedCheckoutCorsConfigTest {
     }
 
     @Test
+    void allowsCredentialedMerchantPlatformOrigin() {
+        HostedCheckoutCorsConfig config = new HostedCheckoutCorsConfig();
+        CorsConfigurationSource source = config.corsConfigurationSource(
+            "",
+            "https://merchant.verox.example"
+        );
+
+        MockHttpServletRequest request = new MockHttpServletRequest(
+            "OPTIONS",
+            "/platform/v1/auth/session"
+        );
+
+        CorsConfiguration cors = source.getCorsConfiguration(request);
+
+        assertThat(cors).isNotNull();
+        assertThat(cors.getAllowedOrigins()).containsExactly("https://merchant.verox.example");
+        assertThat(cors.getAllowedMethods()).containsExactly("GET", "POST", "OPTIONS");
+        assertThat(cors.getAllowedHeaders()).containsExactly("Content-Type", "X-VEROX-CSRF");
+        assertThat(cors.getAllowCredentials()).isTrue();
+    }
+
+    @Test
     void failsClosedWhenNoOriginConfigured() {
         HostedCheckoutCorsConfig config = new HostedCheckoutCorsConfig();
-        CorsConfigurationSource source = config.corsConfigurationSource("");
+        CorsConfigurationSource source = config.corsConfigurationSource("", "");
 
         MockHttpServletRequest request = new MockHttpServletRequest(
             "OPTIONS",
@@ -51,7 +74,8 @@ class HostedCheckoutCorsConfigTest {
     void doesNotExposeMerchantOrBridgeApisToCors() {
         HostedCheckoutCorsConfig config = new HostedCheckoutCorsConfig();
         CorsConfigurationSource source = config.corsConfigurationSource(
-            "https://checkout.verox.example"
+            "https://checkout.verox.example",
+            "https://merchant.verox.example"
         );
 
         MockHttpServletRequest merchant = new MockHttpServletRequest("OPTIONS", "/v1/payments/pay_test");
@@ -65,7 +89,10 @@ class HostedCheckoutCorsConfigTest {
     void rejectsWildcardOriginConfiguration() {
         HostedCheckoutCorsConfig config = new HostedCheckoutCorsConfig();
 
-        assertThatThrownBy(() -> config.corsConfigurationSource("*"))
+        assertThatThrownBy(() -> config.corsConfigurationSource("*", ""))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Wildcard CORS origins are prohibited");
+        assertThatThrownBy(() -> config.corsConfigurationSource("", "*"))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Wildcard CORS origins are prohibited");
     }
