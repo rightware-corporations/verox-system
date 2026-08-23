@@ -1,5 +1,6 @@
 package com.rightware.verox.checkout.application;
 
+import com.rightware.verox.authentication.domain.ApiKeyEnvironment;
 import com.rightware.verox.checkout.domain.CheckoutSession;
 import com.rightware.verox.checkout.domain.CheckoutSessionStatus;
 import com.rightware.verox.checkout.repository.CheckoutSessionRepository;
@@ -9,6 +10,8 @@ import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.domain.PaymentStatus;
 import com.rightware.verox.payment.repository.PaymentRepository;
+import com.rightware.verox.paymentchannel.application.PaymentChannelService;
+import com.rightware.verox.paymentchannel.application.PaymentChannelView;
 import com.rightware.verox.pilot.domain.PilotManualPaymentAcceptance;
 import com.rightware.verox.pilot.repository.PilotManualPaymentAcceptanceRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,6 +38,7 @@ class HostedCheckoutBootstrapServiceTest {
     @Mock PaymentRepository paymentRepository;
     @Mock PilotManualPaymentAcceptanceRepository manualAcceptanceRepository;
     @Mock CheckoutSubmissionCapabilityService capabilityService;
+    @Mock PaymentChannelService paymentChannelService;
 
     private HostedCheckoutBootstrapService service;
 
@@ -44,7 +49,8 @@ class HostedCheckoutBootstrapServiceTest {
             paymentRepository,
             manualAcceptanceRepository,
             capabilityService,
-            new MoneyConverter()
+            new MoneyConverter(),
+            paymentChannelService
         );
     }
 
@@ -67,7 +73,7 @@ class HostedCheckoutBootstrapServiceTest {
     }
 
     @Test
-    void returnsSafeCheckoutPresentationForValidCapability() {
+    void returnsSafeCheckoutPresentationWithActiveChannels() {
         CheckoutSession session = mock(CheckoutSession.class);
         Merchant merchant = mock(Merchant.class);
         Payment payment = mock(Payment.class);
@@ -84,8 +90,20 @@ class HostedCheckoutBootstrapServiceTest {
         when(paymentRepository.findByCheckoutSessionId(sessionId)).thenReturn(Optional.of(payment));
         when(payment.getId()).thenReturn(paymentId);
         when(merchant.getId()).thenReturn(merchantId);
+        when(session.getEnvironment()).thenReturn(ApiKeyEnvironment.TEST);
         when(manualAcceptanceRepository.findByPaymentIdAndMerchantId(paymentId, merchantId))
             .thenReturn(Optional.empty());
+        when(paymentChannelService.listActiveForCheckout(merchantId, ApiKeyEnvironment.TEST))
+            .thenReturn(List.of(new PaymentChannelView(
+                "MPESA",
+                "M-Pesa",
+                "Mobile money",
+                "ACTIVE",
+                "receiver-display",
+                "Recipient",
+                "Use the displayed receiver details.",
+                Instant.now()
+            )));
 
         when(session.getPublicId()).thenReturn("cs_test");
         when(payment.getPublicId()).thenReturn("pay_test");
@@ -111,7 +129,9 @@ class HostedCheckoutBootstrapServiceTest {
         assertThat(result.checkoutStatus()).isEqualTo("OPEN");
         assertThat(result.paymentStatus()).isEqualTo("PENDING");
         assertThat(result.effectivePaymentStatus()).isEqualTo("PENDING");
-        assertThat(result.paymentChannels()).isEmpty();
+        assertThat(result.paymentChannels()).hasSize(1);
+        assertThat(result.paymentChannels().getFirst().provider()).isEqualTo("MPESA");
+        assertThat(result.paymentChannels().getFirst().enabled()).isTrue();
     }
 
     @Test
@@ -132,8 +152,11 @@ class HostedCheckoutBootstrapServiceTest {
         when(paymentRepository.findByCheckoutSessionId(sessionId)).thenReturn(Optional.of(payment));
         when(payment.getId()).thenReturn(paymentId);
         when(merchant.getId()).thenReturn(merchantId);
+        when(session.getEnvironment()).thenReturn(ApiKeyEnvironment.TEST);
         when(manualAcceptanceRepository.findByPaymentIdAndMerchantId(paymentId, merchantId))
             .thenReturn(Optional.of(acceptance));
+        when(paymentChannelService.listActiveForCheckout(merchantId, ApiKeyEnvironment.TEST))
+            .thenReturn(List.of());
         when(payment.getStatus()).thenReturn(PaymentStatus.PENDING);
         when(session.getStatus()).thenReturn(CheckoutSessionStatus.OPEN);
         when(session.getAmountMinor()).thenReturn(100L);
