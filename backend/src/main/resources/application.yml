@@ -43,6 +43,7 @@ verox:
     cookie-same-site: ${VEROX_OPERATOR_SESSION_COOKIE_SAME_SITE:None}
   operator-bootstrap:
     enabled: ${VEROX_OPERATOR_BOOTSTRAP_ENABLED:false}
+    reset-password: ${VEROX_OPERATOR_BOOTSTRAP_RESET_PASSWORD:false}
     merchant-name: ${VEROX_OPERATOR_BOOTSTRAP_MERCHANT_NAME:}
     environment: ${VEROX_OPERATOR_BOOTSTRAP_ENVIRONMENT:TEST}
     username: ${VEROX_OPERATOR_BOOTSTRAP_USERNAME:}
