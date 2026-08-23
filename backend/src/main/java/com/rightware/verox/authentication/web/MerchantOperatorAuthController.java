@@ -15,20 +15,31 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/platform/v1/auth")
 public class MerchantOperatorAuthController {
     private static final String CSRF_COOKIE = "VEROX_CSRF";
+    private static final Set<String> ALLOWED_SAME_SITE = Set.of("Strict", "Lax", "None");
     private final MerchantOperatorSessionService sessionService;
     private final boolean secureCookie;
+    private final String sameSite;
 
     public MerchantOperatorAuthController(
         MerchantOperatorSessionService sessionService,
-        @Value("${verox.operator-session.cookie-secure:true}") boolean secureCookie
+        @Value("${verox.operator-session.cookie-secure:true}") boolean secureCookie,
+        @Value("${verox.operator-session.cookie-same-site:None}") String sameSite
     ) {
+        if (!ALLOWED_SAME_SITE.contains(sameSite)) {
+            throw new IllegalArgumentException("operator session cookie same-site must be Strict, Lax or None");
+        }
+        if ("None".equals(sameSite) && !secureCookie) {
+            throw new IllegalArgumentException("SameSite=None requires secure operator session cookies");
+        }
         this.sessionService = sessionService;
         this.secureCookie = secureCookie;
+        this.sameSite = sameSite;
     }
 
     @PostMapping("/login")
@@ -56,7 +67,7 @@ public class MerchantOperatorAuthController {
         return ResponseCookie.from(name, value)
             .httpOnly(httpOnly)
             .secure(secureCookie)
-            .sameSite("Strict")
+            .sameSite(sameSite)
             .path("/platform/v1")
             .maxAge(maxAge.isNegative() ? Duration.ZERO : maxAge)
             .build().toString();
