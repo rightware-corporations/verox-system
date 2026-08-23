@@ -46,6 +46,13 @@ public class MerchantOperator {
         this.status = MerchantOperatorStatus.ACTIVE;
     }
 
+    public void changePasswordHash(String passwordHash) {
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("passwordHash is required");
+        }
+        this.passwordHash = passwordHash;
+    }
+
     @PrePersist void prePersist() {
         Instant now = Instant.now();
         if (id == null) id = UUID.randomUUID();
