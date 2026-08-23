@@ -22,6 +22,7 @@ public class HostedCheckoutCorsConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(parseAllowedOrigins(configuredOrigins));
         configuration.setAllowedMethods(List.of(
+            HttpMethod.GET.name(),
             HttpMethod.POST.name(),
             HttpMethod.OPTIONS.name()
         ));
