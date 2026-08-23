@@ -40,6 +40,7 @@ verox:
   operator-session:
     ttl-hours: ${VEROX_OPERATOR_SESSION_TTL_HOURS:12}
     cookie-secure: ${VEROX_OPERATOR_SESSION_COOKIE_SECURE:true}
+    cookie-same-site: ${VEROX_OPERATOR_SESSION_COOKIE_SAME_SITE:None}
   operator-bootstrap:
     enabled: ${VEROX_OPERATOR_BOOTSTRAP_ENABLED:false}
     merchant-name: ${VEROX_OPERATOR_BOOTSTRAP_MERCHANT_NAME:}
