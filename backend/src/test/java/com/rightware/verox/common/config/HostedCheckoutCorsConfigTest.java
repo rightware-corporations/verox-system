@@ -26,7 +26,7 @@ class HostedCheckoutCorsConfigTest {
 
         assertThat(cors).isNotNull();
         assertThat(cors.getAllowedOrigins()).containsExactly("https://checkout.verox.example");
-        assertThat(cors.getAllowedMethods()).containsExactly("POST", "OPTIONS");
+        assertThat(cors.getAllowedMethods()).containsExactly("GET", "POST", "OPTIONS");
         assertThat(cors.getAllowedHeaders()).containsExactly("Content-Type", "VEROX-Checkout-Capability");
         assertThat(cors.getAllowCredentials()).isFalse();
     }
@@ -60,6 +60,7 @@ class HostedCheckoutCorsConfigTest {
         assertThat(source.getCorsConfiguration(merchant)).isNull();
         assertThat(source.getCorsConfiguration(bridge)).isNull();
     }
+
     @Test
     void rejectsWildcardOriginConfiguration() {
         HostedCheckoutCorsConfig config = new HostedCheckoutCorsConfig();
