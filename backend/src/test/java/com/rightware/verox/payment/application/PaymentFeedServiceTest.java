@@ -86,8 +86,9 @@ class PaymentFeedServiceTest {
     @Test
     void manualAcceptanceChangesEffectiveStatusAndRemovesAttentionFlag() {
         Payment payment = payment("pay_manual", PaymentStatus.PENDING);
+        UUID paymentId = payment.getId();
         PilotManualPaymentAcceptance acceptance = mock(PilotManualPaymentAcceptance.class);
-        when(acceptance.getPaymentId()).thenReturn(payment.getId());
+        when(acceptance.getPaymentId()).thenReturn(paymentId);
         when(acceptance.getAcceptedAt()).thenReturn(Instant.parse("2026-08-23T15:00:00Z"));
         when(paymentRepository.findAllByMerchantIdAndEnvironment(
             eq(principal.merchantId()),
