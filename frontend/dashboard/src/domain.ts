@@ -1,21 +1,85 @@
 export type Environment = 'TEST' | 'LIVE';
-export type MerchantLifecycle = 'CREATED'|'ONBOARDING'|'INTEGRATION_PENDING'|'TEST_READY'|'LIVE_REVIEW'|'ACTIVE'|'SUSPENDED'|'RESTRICTED'|'DISABLED';
-export type PaymentState = 'CREATED'|'AWAITING_PAYMENT'|'EVIDENCE_RECEIVED'|'VERIFYING'|'CONFIRMED'|'REVIEW_REQUIRED'|'NOT_VERIFIED';
-export type CheckoutState = 'CREATED'|'OPEN'|'PAYMENT_STARTED'|'EVIDENCE_SUBMITTED'|'COMPLETED'|'EXPIRED'|'CANCELLED'|'ABANDONED';
-export type ChannelState = 'NOT_CONFIGURED'|'CONFIGURING'|'VERIFICATION_REQUIRED'|'READY'|'ACTIVE'|'DEGRADED'|'DISCONNECTED'|'DISABLED'|'REQUIRES_ACTION';
-export type WebhookState = 'NOT_CONFIGURED'|'CONFIGURED'|'ACTIVE'|'FAILING'|'DISABLED';
-export type DeliveryState = 'PENDING'|'DELIVERING'|'DELIVERED'|'RETRYING'|'FAILED';
-export type ApiKeyState = 'CREATED'|'ACTIVE'|'REVOKED'|'EXPIRING'|'EXPIRED'|'ROTATED';
-export type ReviewState = 'REVIEW_REQUIRED'|'UNDER_REVIEW'|'MANUALLY_ACCEPTED'|'REJECTED'|'REMAINS_UNRESOLVED';
-export type ProviderId = 'mpesa'|'emola'|'millennium-bim';
 
-export type PaymentRecord = {id:string;externalReference:string;amount:number;currency:'MZN';provider:ProviderId;state:PaymentState;verificationState:string;checkoutId:string;createdAt:string;verifiedAt?:string;environment:Environment};
-export type CheckoutRecord = {id:string;externalReference:string;amount:number;currency:'MZN';state:CheckoutState;paymentState?:PaymentState;createdAt:string;expiresAt:string;paymentId?:string;environment:Environment};
-export type ChannelRecord = {provider:ProviderId;name:string;state:ChannelState;recipient?:string;health:string;lastActivity?:string;environment:Environment;action?:string};
-export type TimelineEvent = {id:string;type:string;timestamp:string;title:string;detail:string;relatedId?:string;state:'neutral'|'active'|'success'|'warning'|'danger'};
-export type ReviewRecord = {paymentId:string;externalReference:string;amount:number;provider:ProviderId;age:string;state:ReviewState;reason?:string;environment:Environment};
-export type ApiKeyRecord = {id:string;name:string;prefix:string;masked:string;state:ApiKeyState;createdAt:string;lastUsed?:string;environment:Environment};
-export type WebhookEndpointRecord = {id:string;url:string;state:WebhookState;environment:Environment;events:string[];lastDelivery?:string};
-export type WebhookDeliveryRecord = {id:string;event:string;state:DeliveryState;httpStatus?:number;attempts:number;timestamp:string;environment:Environment};
-export type TeamMember = {id:string;name:string;email:string;role:'Owner'|'Admin'|'Developer'|'Finance'|'Operations'|'Viewer';status:'ACTIVE'|'INVITED'|'DISABLED';lastActive?:string};
-export type MerchantProfile = {id:string;name:string;lifecycle:MerchantLifecycle;environment:Environment};
+export type PaymentCoreState =
+  | 'PENDING'
+  | 'VERIFYING'
+  | 'CONFIRMED'
+  | 'REVIEW_REQUIRED'
+  | 'FAILED'
+  | 'EXPIRED';
+
+export type PaymentEffectiveState = PaymentCoreState | 'MANUALLY_ACCEPTED';
+export type CheckoutState = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+
+export type MerchantAccount = {
+  merchantId: string;
+  merchantName: string;
+  environment: Environment;
+};
+
+export type MerchantContext = MerchantAccount & {
+  displayBrand?: string;
+  primaryContact?: string;
+};
+
+export type Payment = {
+  id: string;
+  checkoutSessionId: string;
+  externalReference: string;
+  status: PaymentCoreState;
+  effectiveStatus: PaymentEffectiveState;
+  amount: string;
+  currency: string;
+  provider: string | null;
+  confirmedAt: string | null;
+  manuallyAcceptedAt: string | null;
+};
+
+export type CheckoutSession = {
+  id: string;
+  paymentId: string;
+  externalReference: string;
+  status: CheckoutState;
+  paymentStatus: PaymentCoreState;
+  amount: string;
+  currency: string;
+  description: string | null;
+  checkoutUrl: string;
+  expiresAt: string;
+};
+
+export type ManualAcceptance = {
+  paymentId: string;
+  status: 'MANUALLY_ACCEPTED';
+  reason: string | null;
+  acceptedAt: string;
+};
+
+export type OperationalCapability = {
+  canUsePilotManualAcceptance: boolean;
+  source: 'SERVER_CONFIGURATION' | 'UNAVAILABLE';
+};
+
+export type PaymentSemantic = {
+  label: string;
+  tone: 'neutral' | 'active' | 'success' | 'warning' | 'danger';
+  provenance: 'CORE' | 'MANUAL';
+};
+
+export function paymentSemantic(status: PaymentEffectiveState): PaymentSemantic {
+  switch (status) {
+    case 'PENDING': return {label:'Pending verification', tone:'neutral', provenance:'CORE'};
+    case 'VERIFYING': return {label:'Verifying', tone:'active', provenance:'CORE'};
+    case 'CONFIRMED': return {label:'Confirmed', tone:'success', provenance:'CORE'};
+    case 'REVIEW_REQUIRED': return {label:'Review required', tone:'warning', provenance:'CORE'};
+    case 'FAILED': return {label:'Failed', tone:'danger', provenance:'CORE'};
+    case 'EXPIRED': return {label:'Expired', tone:'neutral', provenance:'CORE'};
+    case 'MANUALLY_ACCEPTED': return {label:'Accepted manually', tone:'warning', provenance:'MANUAL'};
+  }
+}
+
+export function canAcceptManually(payment: Payment, capability: OperationalCapability): boolean {
+  if (!capability.canUsePilotManualAcceptance) return false;
+  if (payment.effectiveStatus === 'MANUALLY_ACCEPTED') return false;
+  return payment.status === 'PENDING' || payment.status === 'REVIEW_REQUIRED';
+}
