@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -48,10 +50,23 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     );
 
     @EntityGraph(attributePaths = {"merchant", "checkoutSession"})
-    Page<Payment> findAllByMerchantIdAndEnvironmentAndStatusIn(
-        UUID merchantId,
-        ApiKeyEnvironment environment,
-        Collection<PaymentStatus> statuses,
+    @Query("""
+        select p
+        from Payment p
+        where p.merchant.id = :merchantId
+          and p.environment = :environment
+          and p.status in :statuses
+          and not exists (
+              select a.id
+              from PilotManualPaymentAcceptance a
+              where a.paymentId = p.id
+                and a.merchantId = :merchantId
+          )
+        """)
+    Page<Payment> findAttentionRequired(
+        @Param("merchantId") UUID merchantId,
+        @Param("environment") ApiKeyEnvironment environment,
+        @Param("statuses") Collection<PaymentStatus> statuses,
         Pageable pageable
     );
 
