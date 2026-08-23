@@ -40,6 +40,13 @@ verox:
   operator-session:
     ttl-hours: ${VEROX_OPERATOR_SESSION_TTL_HOURS:12}
     cookie-secure: ${VEROX_OPERATOR_SESSION_COOKIE_SECURE:true}
+  operator-bootstrap:
+    enabled: ${VEROX_OPERATOR_BOOTSTRAP_ENABLED:false}
+    merchant-name: ${VEROX_OPERATOR_BOOTSTRAP_MERCHANT_NAME:}
+    environment: ${VEROX_OPERATOR_BOOTSTRAP_ENVIRONMENT:TEST}
+    username: ${VEROX_OPERATOR_BOOTSTRAP_USERNAME:}
+    display-name: ${VEROX_OPERATOR_BOOTSTRAP_DISPLAY_NAME:}
+    password: ${VEROX_OPERATOR_BOOTSTRAP_PASSWORD:}
   bootstrap:
     enabled: ${VEROX_BOOTSTRAP_ENABLED:false}
     merchant-name: ${VEROX_BOOTSTRAP_MERCHANT_NAME:VEROX MVP Merchant}
