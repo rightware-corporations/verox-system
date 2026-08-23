@@ -22,8 +22,14 @@ public class PilotManualPaymentAcceptance {
     @Column(name = "merchant_id", nullable = false)
     private UUID merchantId;
 
-    @Column(name = "accepted_by_api_key_id", nullable = false)
+    @Column(name = "accepted_by_api_key_id")
     private UUID acceptedByApiKeyId;
+
+    @Column(name = "accepted_by_operator_id")
+    private UUID acceptedByOperatorId;
+
+    @Column(name = "accepted_by_actor_type", nullable = false, length = 32)
+    private String acceptedByActorType;
 
     @Column(length = 255)
     private String reason;
@@ -43,32 +49,51 @@ public class PilotManualPaymentAcceptance {
         UUID acceptedByApiKeyId,
         String reason
     ) {
+        this(paymentId, merchantId, acceptedByApiKeyId, null, "API_KEY", reason);
+    }
+
+    public static PilotManualPaymentAcceptance acceptedByOperator(
+        UUID paymentId,
+        UUID merchantId,
+        UUID operatorId,
+        String reason
+    ) {
+        return new PilotManualPaymentAcceptance(paymentId, merchantId, null, operatorId, "OPERATOR", reason);
+    }
+
+    private PilotManualPaymentAcceptance(
+        UUID paymentId,
+        UUID merchantId,
+        UUID acceptedByApiKeyId,
+        UUID acceptedByOperatorId,
+        String acceptedByActorType,
+        String reason
+    ) {
         this.id = UUID.randomUUID();
         this.paymentId = paymentId;
         this.merchantId = merchantId;
         this.acceptedByApiKeyId = acceptedByApiKeyId;
+        this.acceptedByOperatorId = acceptedByOperatorId;
+        this.acceptedByActorType = acceptedByActorType;
         this.reason = reason == null || reason.isBlank() ? null : reason.trim();
         this.acceptedAt = Instant.now();
     }
 
     @PrePersist
     void prePersist() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
+        if (id == null) id = UUID.randomUUID();
+        if (acceptedByActorType == null) acceptedByActorType = acceptedByOperatorId == null ? "API_KEY" : "OPERATOR";
         Instant now = Instant.now();
-        if (acceptedAt == null) {
-            acceptedAt = now;
-        }
-        if (createdAt == null) {
-            createdAt = now;
-        }
+        if (acceptedAt == null) acceptedAt = now;
+        if (createdAt == null) createdAt = now;
     }
 
     public UUID getId() { return id; }
     public UUID getPaymentId() { return paymentId; }
     public UUID getMerchantId() { return merchantId; }
     public UUID getAcceptedByApiKeyId() { return acceptedByApiKeyId; }
+    public UUID getAcceptedByOperatorId() { return acceptedByOperatorId; }
+    public String getAcceptedByActorType() { return acceptedByActorType; }
     public String getReason() { return reason; }
     public Instant getAcceptedAt() { return acceptedAt; }
     public Instant getCreatedAt() { return createdAt; }
