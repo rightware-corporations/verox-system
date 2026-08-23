@@ -17,26 +17,38 @@ public class HostedCheckoutCorsConfig {
 
     @Bean
     CorsConfigurationSource corsConfigurationSource(
-        @Value("${verox.cors.hosted-checkout-allowed-origins:}") String configuredOrigins
+        @Value("${verox.cors.hosted-checkout-allowed-origins:}") String checkoutOrigins,
+        @Value("${verox.cors.merchant-platform-allowed-origins:}") String platformOrigins
     ) {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(parseAllowedOrigins(configuredOrigins));
-        configuration.setAllowedMethods(List.of(
+        CorsConfiguration checkout = new CorsConfiguration();
+        checkout.setAllowedOrigins(parseAllowedOrigins(checkoutOrigins));
+        checkout.setAllowedMethods(List.of(
             HttpMethod.GET.name(),
             HttpMethod.POST.name(),
             HttpMethod.OPTIONS.name()
         ));
-        configuration.setAllowedHeaders(List.of(
+        checkout.setAllowedHeaders(List.of(
             HttpHeaders.CONTENT_TYPE,
             "VEROX-Checkout-Capability"
         ));
-        configuration.setAllowCredentials(false);
+        checkout.setAllowCredentials(false);
+
+        CorsConfiguration platform = new CorsConfiguration();
+        platform.setAllowedOrigins(parseAllowedOrigins(platformOrigins));
+        platform.setAllowedMethods(List.of(
+            HttpMethod.GET.name(),
+            HttpMethod.POST.name(),
+            HttpMethod.OPTIONS.name()
+        ));
+        platform.setAllowedHeaders(List.of(
+            HttpHeaders.CONTENT_TYPE,
+            "X-VEROX-CSRF"
+        ));
+        platform.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration(
-            "/public/v1/checkout/**",
-            configuration
-        );
+        source.registerCorsConfiguration("/public/v1/checkout/**", checkout);
+        source.registerCorsConfiguration("/platform/v1/**", platform);
         return source;
     }
 
@@ -52,7 +64,7 @@ public class HostedCheckoutCorsConfig {
 
         if (origins.stream().anyMatch("*"::equals)) {
             throw new IllegalStateException(
-                "Wildcard CORS origins are prohibited for the VEROX Hosted Checkout"
+                "Wildcard CORS origins are prohibited for VEROX browser applications"
             );
         }
 
