@@ -8,12 +8,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class MerchantOperatorBootstrapRunner implements CommandLineRunner {
     private final MerchantOperatorRepository operatorRepository;
     private final MerchantRepository merchantRepository;
     private final boolean enabled;
+    private final boolean resetPassword;
     private final String merchantName;
     private final ApiKeyEnvironment environment;
     private final String username;
@@ -24,6 +26,7 @@ public class MerchantOperatorBootstrapRunner implements CommandLineRunner {
         MerchantOperatorRepository operatorRepository,
         MerchantRepository merchantRepository,
         @Value("${verox.operator-bootstrap.enabled:false}") boolean enabled,
+        @Value("${verox.operator-bootstrap.reset-password:false}") boolean resetPassword,
         @Value("${verox.operator-bootstrap.merchant-name:}") String merchantName,
         @Value("${verox.operator-bootstrap.environment:TEST}") ApiKeyEnvironment environment,
         @Value("${verox.operator-bootstrap.username:}") String username,
@@ -33,6 +36,7 @@ public class MerchantOperatorBootstrapRunner implements CommandLineRunner {
         this.operatorRepository = operatorRepository;
         this.merchantRepository = merchantRepository;
         this.enabled = enabled;
+        this.resetPassword = resetPassword;
         this.merchantName = merchantName;
         this.environment = environment;
         this.username = username;
@@ -41,6 +45,7 @@ public class MerchantOperatorBootstrapRunner implements CommandLineRunner {
     }
 
     @Override
+    @Transactional
     public void run(String... args) {
         if (!enabled) return;
         if (merchantName == null || merchantName.isBlank()
@@ -51,7 +56,15 @@ public class MerchantOperatorBootstrapRunner implements CommandLineRunner {
         }
 
         String normalizedUsername = username.trim().toLowerCase(java.util.Locale.ROOT);
-        if (operatorRepository.findByUsername(normalizedUsername).isPresent()) return;
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        MerchantOperator existing = operatorRepository.findByUsername(normalizedUsername).orElse(null);
+        if (existing != null) {
+            if (resetPassword) {
+                existing.changePasswordHash(encoder.encode(password));
+                operatorRepository.save(existing);
+            }
+            return;
+        }
 
         var merchant = merchantRepository.findByNameIgnoreCase(merchantName.trim())
             .orElseThrow(() -> new IllegalStateException("Operator bootstrap merchant was not found"));
@@ -59,13 +72,12 @@ public class MerchantOperatorBootstrapRunner implements CommandLineRunner {
             throw new IllegalStateException("Operator bootstrap merchant must be active");
         }
 
-        String passwordHash = new BCryptPasswordEncoder().encode(password);
         operatorRepository.save(new MerchantOperator(
             merchant,
             environment,
             normalizedUsername,
             displayName,
-            passwordHash
+            encoder.encode(password)
         ));
     }
 }
