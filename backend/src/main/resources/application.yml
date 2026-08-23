@@ -36,6 +36,10 @@ verox:
     manual-acceptance-merchant-ids: ${VEROX_PILOT_MANUAL_ACCEPTANCE_MERCHANT_IDS:}
   cors:
     hosted-checkout-allowed-origins: ${VEROX_CORS_HOSTED_CHECKOUT_ALLOWED_ORIGINS:}
+    merchant-platform-allowed-origins: ${VEROX_CORS_MERCHANT_PLATFORM_ALLOWED_ORIGINS:}
+  operator-session:
+    ttl-hours: ${VEROX_OPERATOR_SESSION_TTL_HOURS:12}
+    cookie-secure: ${VEROX_OPERATOR_SESSION_COOKIE_SECURE:true}
   bootstrap:
     enabled: ${VEROX_BOOTSTRAP_ENABLED:false}
     merchant-name: ${VEROX_BOOTSTRAP_MERCHANT_NAME:VEROX MVP Merchant}
