@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowRight, Check, Copy, LockKeyhole, MessageSquareText, RotateCw, ShieldCheck, TriangleAlert, WifiOff, X } from 'lucide-react';
-import { VEROX_LOGO, VEROX_SYMBOL } from './verox-assets';
 import './v3.css';
 
 type Screen = 'ready'|'instructions'|'evidence'|'verifying'|'confirmed'|'review'|'failed'|'expired'|'network';
@@ -50,7 +49,7 @@ function App(){
   </div>
 }
 
-function Header(){return <header className="v3-header"><img src={VEROX_LOGO} alt="VEROX"/><div className="secure-mark"><LockKeyhole size={13}/> Secure checkout</div></header>}
+function Header(){return <header className="v3-header"><img src="/verox-mark.svg" alt="VEROX"/><div className="secure-mark"><LockKeyhole size={13}/> Secure checkout</div></header>}
 
 function Stage({step}:{step:number}){return <nav className="stage" aria-label="Progresso do checkout">{['Pagamento','Comprovativo','Verificação'].map((label,i)=>{const n=i+1;return <div key={label} className={`stage-item ${n<step?'done':''} ${n===step?'active':''}`}><span>{n<step?<Check size={12}/>:String(n).padStart(2,'0')}</span><strong>{label}</strong></div>})}</nav>}
 
@@ -88,7 +87,7 @@ function Verifying(){return <StateLayout tone="info" eyebrow="Verificação em c
 </StateLayout>}
 
 function Confirmed(){return <StateLayout tone="success" eyebrow="Verificação concluída" title="Pagamento confirmado." icon={<Check/>}>
-  <section className="receipt"><div className="receipt-money"><strong>{payment.amount}</strong><span>{payment.currency}</span></div><div className="receipt-grid"><div><small>Merchant</small><b>{payment.merchant}</b></div><div><small>Método</small><b>M-Pesa</b></div><div><small>Referência</small><b>{payment.reference}</b></div><div><small>Checkout</small><b>{payment.checkout}</b></div></div><div className="receipt-seal"><img src={VEROX_SYMBOL}/><span>VEROX VERIFIED</span></div></section><p className="state-copy">O VEROX Server verificou o pagamento. Agora é seguro regressar ao merchant.</p><Primary onClick={()=>{}}>Voltar à Mapiko Store</Primary>
+  <section className="receipt"><div className="receipt-money"><strong>{payment.amount}</strong><span>{payment.currency}</span></div><div className="receipt-grid"><div><small>Merchant</small><b>{payment.merchant}</b></div><div><small>Método</small><b>M-Pesa</b></div><div><small>Referência</small><b>{payment.reference}</b></div><div><small>Checkout</small><b>{payment.checkout}</b></div></div><div className="receipt-seal"><img src="/verox-mark.svg"/><span>VEROX VERIFIED</span></div></section><p className="state-copy">O VEROX Server verificou o pagamento. Agora é seguro regressar ao merchant.</p><Primary onClick={()=>{}}>Voltar à Mapiko Store</Primary>
 </StateLayout>}
 
 function Review(){return <StateLayout tone="warning" eyebrow="Revisão necessária" title="Estamos a rever o seu pagamento." icon={<TriangleAlert/>}><TransactionStrip/><p className="state-copy">Recebemos a informação, mas ainda não é seguro declarar o pagamento confirmado.</p><aside className="warning-band"><TriangleAlert size={17}/><strong>Não faça outro pagamento.</strong><span>A transação pode já ter sido efetuada.</span></aside></StateLayout>}
@@ -100,7 +99,7 @@ function StateLayout({tone,eyebrow,title,icon,children}:{tone:string;eyebrow:str
 function TransactionStrip(){return <div className="transaction-strip"><span><small>Merchant</small><b>{payment.merchant}</b></span><span><small>Método</small><b>M-Pesa</b></span><span><small>Referência</small><b>{payment.reference}</b></span></div>}
 function Back({onClick}:{onClick:()=>void}){return <button className="back-btn" onClick={onClick}>← Voltar</button>}
 function Primary({children,onClick,disabled=false}:{children:React.ReactNode;onClick:()=>void;disabled?:boolean}){return <button className="primary-v3" onClick={onClick} disabled={disabled}><span>{children}</span><ArrowRight size={18}/></button>}
-function Footer(){return <footer className="v3-footer"><div><ShieldCheck size={13}/> Verificação protegida por</div><img src={VEROX_SYMBOL} alt=""/><strong>VEROX</strong></footer>}
+function Footer(){return <footer className="v3-footer"><div><ShieldCheck size={13}/> Verificação protegida por</div><img src="/verox-mark.svg" alt=""/><strong>VEROX</strong></footer>}
 function DevNav({current,setScreen}:{current:Screen;setScreen:(s:Screen)=>void}){const screens:Screen[]=['ready','instructions','evidence','verifying','confirmed','review','failed','expired','network'];return <div className="dev-panel">{screens.map(s=><button className={current===s?'active':''} onClick={()=>setScreen(s)} key={s}>{s}</button>)}</div>}
 
 function VectorField(){return <svg className="vector-field" viewBox="0 0 1200 1000" aria-hidden="true"><defs><linearGradient id="vg" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#00d1d4"/><stop offset="1" stopColor="#0b6373"/></linearGradient></defs><path d="M80 160 H310 L410 260 H740 L880 120 H1110"/><path d="M60 690 H260 L390 560 H700 L860 720 H1140"/><path d="M180 910 L410 680 H790 L1010 900"/><circle cx="310" cy="160" r="5"/><circle cx="410" cy="260" r="5"/><circle cx="860" cy="720" r="5"/><polygon points="880,100 900,120 880,140 860,120" fill="url(#vg)"/></svg>}
