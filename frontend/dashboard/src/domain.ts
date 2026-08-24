@@ -10,6 +10,7 @@ export type PaymentCoreState =
 
 export type PaymentEffectiveState = PaymentCoreState | 'MANUALLY_ACCEPTED';
 export type PaymentChannelStatus = 'ACTIVE' | 'INACTIVE';
+export type CheckoutState = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
 
 export type OperatorSession = {
   operatorId: string;
@@ -19,7 +20,11 @@ export type OperatorSession = {
   environment: Environment;
 };
 
-export type MerchantAccount = OperatorSession;
+export type MerchantAccount = {
+  merchantId: string;
+  merchantName: string;
+  environment: Environment;
+};
 
 export type Payment = {
   id: string;
@@ -55,6 +60,23 @@ export type PaymentFeedQuery = {
   size?: number;
 };
 
+export type CheckoutSession = {
+  id: string;
+  paymentId: string;
+  externalReference: string;
+  status: CheckoutState;
+  paymentStatus: PaymentCoreState;
+  amount: string;
+  currency: string;
+  description: string | null;
+  checkoutUrl: string;
+  expiresAt: string;
+};
+
+export type OperationalCapability = {
+  canUsePilotManualAcceptance: boolean;
+  source: 'SERVER_CONFIGURATION' | 'UNAVAILABLE';
+};
 export type ManualAcceptance = {
   paymentId: string;
   status: 'MANUALLY_ACCEPTED';
