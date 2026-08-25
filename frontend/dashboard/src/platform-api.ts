@@ -13,9 +13,7 @@ import type {
 } from './domain';
 
 const DEFAULT_BACKEND_ORIGIN = 'https://verox-backend-production.up.railway.app';
-const CONFIGURED_BACKEND_ORIGIN = (import.meta.env.VITE_VEROX_BACKEND_BASE_URL || DEFAULT_BACKEND_ORIGIN).replace(/\/$/, '');
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
-export const PLATFORM_BACKEND_ORIGIN = LOCAL_HOSTS.has(window.location.hostname) ? CONFIGURED_BACKEND_ORIGIN : window.location.origin;
+export const PLATFORM_BACKEND_ORIGIN = (import.meta.env.VITE_VEROX_BACKEND_BASE_URL || DEFAULT_BACKEND_ORIGIN).replace(/\/$/, '');
 
 export class PlatformApiError extends Error {
   readonly status: number;
@@ -33,7 +31,7 @@ export class PlatformApiError extends Error {
 
 export class PlatformCsrfUnavailableError extends Error {
   constructor() {
-    super('A sessão segura não disponibilizou o token de confirmação. Entre novamente e repita a ação.');
+    super('VEROX_CSRF is not readable from this frontend origin. A same-origin deployment/proxy or backend CSRF token delivery adjustment is required before browser mutations can succeed safely.');
     this.name = 'PlatformCsrfUnavailableError';
   }
 }
@@ -106,6 +104,7 @@ type ApiErrorWire = {error?: {code?: string; message?: string}};
 
 type RequestOptions = RequestInit & {csrf?: boolean};
 
+let csrfToken: string | null = sessionStorage.getItem('verox_csrf_token');
 function readCookie(name: string): string | null {
   const prefix = `${encodeURIComponent(name)}=`;
   for (const entry of document.cookie.split(';')) {
@@ -115,16 +114,13 @@ function readCookie(name: string): string | null {
   return null;
 }
 
-let csrfToken: string | null = sessionStorage.getItem('verox_csrf_token') || readCookie('VEROX_CSRF');
-
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
   if (options.csrf) {
-    const csrf = readCookie('VEROX_CSRF') || csrfToken;
+    const csrf = csrfToken || readCookie('VEROX_CSRF');
     if (!csrf) throw new PlatformCsrfUnavailableError();
-    csrfToken = csrf;
     headers.set('X-VEROX-CSRF', csrf);
   }
 
@@ -228,17 +224,13 @@ function mapAcceptance(dto: ManualAcceptanceWire): ManualAcceptance {
 export const platformApi = {
   login: async (username: string, password: string): Promise<OperatorSession> => {
     const dto = await request<SessionWire>('/platform/v1/auth/login', {method: 'POST', body: JSON.stringify({username, password})});
-    csrfToken = dto.csrf_token || readCookie('VEROX_CSRF');
+    csrfToken = dto.csrf_token || null;
     if (csrfToken) sessionStorage.setItem('verox_csrf_token', csrfToken);
     return mapSession(dto);
   },
 
-  session: async (): Promise<OperatorSession> => {
-    const dto = await request<SessionWire>('/platform/v1/auth/session');
-    csrfToken = readCookie('VEROX_CSRF') || csrfToken;
-    if (csrfToken) sessionStorage.setItem('verox_csrf_token', csrfToken);
-    return mapSession(dto);
-  },
+  session: async (): Promise<OperatorSession> =>
+    mapSession(await request<SessionWire>('/platform/v1/auth/session')),
 
   logout: async (): Promise<void> => { await request<void>('/platform/v1/auth/logout', {method: 'POST', csrf: true}); csrfToken = null; sessionStorage.removeItem('verox_csrf_token'); },
 
