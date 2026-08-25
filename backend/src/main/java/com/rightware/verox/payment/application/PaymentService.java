@@ -1,5 +1,6 @@
 package com.rightware.verox.payment.application;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import com.rightware.verox.authentication.application.MerchantPrincipal;
 import com.rightware.verox.common.money.MoneyConverter;
 import com.rightware.verox.common.web.ApiException;
@@ -23,6 +24,7 @@ public class PaymentService {
     private final PilotManualPaymentRejectionRepository manualRejectionRepository;
     private final EvidenceRepository evidenceRepository;
 
+    @Autowired
     public PaymentService(
         PaymentRepository paymentRepository,
         MoneyConverter moneyConverter,
