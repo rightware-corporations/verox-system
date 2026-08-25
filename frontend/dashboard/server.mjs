@@ -28,19 +28,20 @@ async function proxyPlatform(request,response){
     }
     headers.set('X-Forwarded-Host',request.headers.host||'');
     headers.set('X-Forwarded-Proto','https');
+    headers.set('Accept-Encoding','identity');
     const method=request.method||'GET';
     const body=(method==='GET'||method==='HEAD')?undefined:await readBody(request);
     const upstream=await fetch(target,{method,headers,body,redirect:'manual'});
     response.statusCode=upstream.status;
     for(const [name,value] of upstream.headers){
       const lower=name.toLowerCase();
-      if(lower==='set-cookie'||hopByHopHeaders.has(lower))continue;
+      if(lower==='set-cookie'||lower==='content-encoding'||hopByHopHeaders.has(lower))continue;
       response.setHeader(name,value);
     }
     const setCookies=typeof upstream.headers.getSetCookie==='function'?upstream.headers.getSetCookie():[];
     if(setCookies.length)response.setHeader('Set-Cookie',setCookies.map(rewriteCookie));
     const payload=Buffer.from(await upstream.arrayBuffer());
-    if(!response.hasHeader('Content-Length'))response.setHeader('Content-Length',String(payload.length));
+    response.setHeader('Content-Length',String(payload.length));
     response.end(payload);
   }catch(error){
     console.error('VEROX Merchant Platform proxy error',error);
