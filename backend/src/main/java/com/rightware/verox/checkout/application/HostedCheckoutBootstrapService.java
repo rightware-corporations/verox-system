@@ -11,6 +11,7 @@ import com.rightware.verox.paymentchannel.application.PaymentChannelService;
 import com.rightware.verox.evidence.domain.Evidence;
 import com.rightware.verox.evidence.repository.EvidenceRepository;
 import com.rightware.verox.pilot.repository.PilotManualPaymentAcceptanceRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ public class HostedCheckoutBootstrapService {
     private final PaymentChannelService paymentChannelService;
     private final EvidenceRepository evidenceRepository;
 
+    @Autowired
     public HostedCheckoutBootstrapService(
         CheckoutSessionRepository checkoutSessionRepository,
         PaymentRepository paymentRepository,
