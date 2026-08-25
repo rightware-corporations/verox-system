@@ -10,6 +10,12 @@ import com.rightware.verox.payment.domain.PaymentStatus;
 import com.rightware.verox.payment.repository.PaymentRepository;
 import com.rightware.verox.pilot.domain.PilotManualPaymentAcceptance;
 import com.rightware.verox.pilot.repository.PilotManualPaymentAcceptanceRepository;
+import com.rightware.verox.pilot.domain.PilotManualPaymentRejection;
+import com.rightware.verox.pilot.repository.PilotManualPaymentRejectionRepository;
+import com.rightware.verox.evidence.repository.EvidenceRepository;
+import com.rightware.verox.evidence.domain.Evidence;
+import com.rightware.verox.evidence.domain.EvidenceOrigin;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +38,8 @@ class PaymentServiceTest {
 
     @Mock PaymentRepository paymentRepository;
     @Mock PilotManualPaymentAcceptanceRepository manualAcceptanceRepository;
+    @Mock PilotManualPaymentRejectionRepository manualRejectionRepository;
+    @Mock EvidenceRepository evidenceRepository;
 
     private PaymentService service;
     private UUID merchantId;
@@ -43,7 +51,9 @@ class PaymentServiceTest {
         service = new PaymentService(
             paymentRepository,
             new MoneyConverter(),
-            manualAcceptanceRepository
+            manualAcceptanceRepository,
+            manualRejectionRepository,
+            evidenceRepository
         );
         merchantId = UUID.randomUUID();
         apiKeyId = UUID.randomUUID();
@@ -82,6 +92,29 @@ class PaymentServiceTest {
     }
 
     @Test
+    void pendingPaymentWithManualRejectionExposesRejectedEffectiveStatusWithoutChangingCoreStatus() {
+        Payment payment = paymentForView("pay_rejected", PaymentStatus.PENDING);
+        PilotManualPaymentRejection rejection = new PilotManualPaymentRejection(payment.getId(), merchantId, null, UUID.randomUUID(), "Não recebido");
+        when(manualAcceptanceRepository.findByPaymentIdAndMerchantId(payment.getId(), merchantId)).thenReturn(Optional.empty());
+        when(manualRejectionRepository.findByPaymentIdAndMerchantId(payment.getId(), merchantId)).thenReturn(Optional.of(rejection));
+        PaymentView view = service.getForMerchant(principal, "pay_rejected");
+        assertThat(view.status()).isEqualTo("PENDING");
+        assertThat(view.effectiveStatus()).isEqualTo("MANUALLY_REJECTED");
+        assertThat(view.manuallyRejectedAt()).isEqualTo(rejection.getRejectedAt());
+    }
+
+    @Test
+    void confirmedPaymentAlwaysTakesPrecedenceOverManualRejection() {
+        Payment payment = paymentForView("pay_confirmed_rejected", PaymentStatus.CONFIRMED);
+        PilotManualPaymentRejection rejection = new PilotManualPaymentRejection(payment.getId(), merchantId, null, UUID.randomUUID(), "não localizado antes da confirmação");
+        when(manualAcceptanceRepository.findByPaymentIdAndMerchantId(payment.getId(), merchantId)).thenReturn(Optional.empty());
+        when(manualRejectionRepository.findByPaymentIdAndMerchantId(payment.getId(), merchantId)).thenReturn(Optional.of(rejection));
+        PaymentView view = service.getForMerchant(principal, "pay_confirmed_rejected");
+        assertThat(view.status()).isEqualTo("CONFIRMED");
+        assertThat(view.effectiveStatus()).isEqualTo("CONFIRMED");
+    }
+
+    @Test
     void confirmedPaymentAlwaysExposesConfirmedAsEffectiveStatus() {
         Payment payment = paymentForView("pay_confirmed", PaymentStatus.CONFIRMED);
         PilotManualPaymentAcceptance acceptance = new PilotManualPaymentAcceptance(
@@ -95,6 +128,25 @@ class PaymentServiceTest {
         assertThat(view.status()).isEqualTo("CONFIRMED");
         assertThat(view.effectiveStatus()).isEqualTo("CONFIRMED");
         assertThat(view.manuallyAcceptedAt()).isEqualTo(acceptance.getAcceptedAt());
+    }
+
+    @Test
+    void authorizedMerchantCanReadCustomerEvidenceForItsPayment() {
+        Payment payment = paymentForView("pay_evidence", PaymentStatus.PENDING);
+        Evidence evidence = org.mockito.Mockito.mock(Evidence.class);
+        when(manualAcceptanceRepository.findByPaymentIdAndMerchantId(payment.getId(), merchantId)).thenReturn(Optional.empty());
+        when(manualRejectionRepository.findByPaymentIdAndMerchantId(payment.getId(), merchantId)).thenReturn(Optional.empty());
+        when(evidenceRepository.findAllByPaymentIdOrderByReceivedAtAsc(payment.getId())).thenReturn(List.of(evidence));
+        when(evidence.getOrigin()).thenReturn(EvidenceOrigin.CUSTOMER);
+        when(evidence.getRawContent()).thenReturn("Mensagem completa do cliente");
+        when(evidence.getProvider()).thenReturn("MPESA");
+        when(evidence.getReceivedAt()).thenReturn(Instant.parse("2026-08-25T00:58:00Z"));
+
+        PaymentView view = service.getForMerchant(principal, "pay_evidence");
+
+        assertThat(view.customerEvidence()).isNotNull();
+        assertThat(view.customerEvidence().message()).isEqualTo("Mensagem completa do cliente");
+        assertThat(view.customerEvidence().channel()).isEqualTo("MPESA");
     }
 
     @Test

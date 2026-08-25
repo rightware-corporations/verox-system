@@ -8,6 +8,8 @@ import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.domain.PaymentStatus;
 import com.rightware.verox.payment.repository.PaymentRepository;
 import com.rightware.verox.paymentchannel.application.PaymentChannelService;
+import com.rightware.verox.evidence.domain.Evidence;
+import com.rightware.verox.evidence.repository.EvidenceRepository;
 import com.rightware.verox.pilot.repository.PilotManualPaymentAcceptanceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,7 @@ public class HostedCheckoutBootstrapService {
     private final CheckoutSubmissionCapabilityService capabilityService;
     private final MoneyConverter moneyConverter;
     private final PaymentChannelService paymentChannelService;
+    private final EvidenceRepository evidenceRepository;
 
     public HostedCheckoutBootstrapService(
         CheckoutSessionRepository checkoutSessionRepository,
@@ -28,7 +31,8 @@ public class HostedCheckoutBootstrapService {
         PilotManualPaymentAcceptanceRepository manualAcceptanceRepository,
         CheckoutSubmissionCapabilityService capabilityService,
         MoneyConverter moneyConverter,
-        PaymentChannelService paymentChannelService
+        PaymentChannelService paymentChannelService,
+        EvidenceRepository evidenceRepository
     ) {
         this.checkoutSessionRepository = checkoutSessionRepository;
         this.paymentRepository = paymentRepository;
@@ -36,6 +40,11 @@ public class HostedCheckoutBootstrapService {
         this.capabilityService = capabilityService;
         this.moneyConverter = moneyConverter;
         this.paymentChannelService = paymentChannelService;
+        this.evidenceRepository = evidenceRepository;
+    }
+
+    public HostedCheckoutBootstrapService(CheckoutSessionRepository checkoutSessionRepository, PaymentRepository paymentRepository, PilotManualPaymentAcceptanceRepository manualAcceptanceRepository, CheckoutSubmissionCapabilityService capabilityService, MoneyConverter moneyConverter, PaymentChannelService paymentChannelService) {
+        this(checkoutSessionRepository, paymentRepository, manualAcceptanceRepository, capabilityService, moneyConverter, paymentChannelService, null);
     }
 
     @Transactional(readOnly = true)
@@ -61,6 +70,8 @@ public class HostedCheckoutBootstrapService {
         String effectivePaymentStatus = payment.getStatus() == PaymentStatus.CONFIRMED
             ? PaymentStatus.CONFIRMED.name()
             : manualAcceptance != null ? "MANUALLY_ACCEPTED" : payment.getStatus().name();
+
+        Evidence evidence = evidenceRepository == null ? null : evidenceRepository.findAllByPaymentIdOrderByReceivedAtAsc(payment.getId()).stream().filter(item -> item.getOrigin().name().equals("CUSTOMER") && item.getRawContent() != null).reduce((first, second) -> second).orElse(null);
 
         var channels = paymentChannelService
             .listActiveForCheckout(session.getMerchant().getId(), session.getEnvironment())
@@ -90,7 +101,9 @@ public class HostedCheckoutBootstrapService {
             session.getExpiresAt(),
             session.getSuccessUrl(),
             session.getCancelUrl(),
-            channels
+            channels,
+            evidence != null,
+            evidence == null ? null : evidence.getReceivedAt()
         );
     }
 

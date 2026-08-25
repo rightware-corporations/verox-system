@@ -7,6 +7,9 @@ import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.domain.PaymentStatus;
 import com.rightware.verox.payment.repository.PaymentRepository;
 import com.rightware.verox.pilot.repository.PilotManualPaymentAcceptanceRepository;
+import com.rightware.verox.pilot.repository.PilotManualPaymentRejectionRepository;
+import com.rightware.verox.evidence.domain.Evidence;
+import com.rightware.verox.evidence.repository.EvidenceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,15 +20,25 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final MoneyConverter moneyConverter;
     private final PilotManualPaymentAcceptanceRepository manualAcceptanceRepository;
+    private final PilotManualPaymentRejectionRepository manualRejectionRepository;
+    private final EvidenceRepository evidenceRepository;
 
     public PaymentService(
         PaymentRepository paymentRepository,
         MoneyConverter moneyConverter,
-        PilotManualPaymentAcceptanceRepository manualAcceptanceRepository
+        PilotManualPaymentAcceptanceRepository manualAcceptanceRepository,
+        PilotManualPaymentRejectionRepository manualRejectionRepository,
+        EvidenceRepository evidenceRepository
     ) {
         this.paymentRepository = paymentRepository;
         this.moneyConverter = moneyConverter;
         this.manualAcceptanceRepository = manualAcceptanceRepository;
+        this.manualRejectionRepository = manualRejectionRepository;
+        this.evidenceRepository = evidenceRepository;
+    }
+
+    public PaymentService(PaymentRepository paymentRepository, MoneyConverter moneyConverter, PilotManualPaymentAcceptanceRepository manualAcceptanceRepository) {
+        this(paymentRepository, moneyConverter, manualAcceptanceRepository, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -42,11 +55,24 @@ public class PaymentService {
             .findByPaymentIdAndMerchantId(payment.getId(), principal.merchantId())
             .orElse(null);
 
+        var manualRejection = manualRejectionRepository == null ? null : manualRejectionRepository.findByPaymentIdAndMerchantId(payment.getId(), principal.merchantId()).orElse(null);
         String effectiveStatus = payment.getStatus() == PaymentStatus.CONFIRMED
             ? PaymentStatus.CONFIRMED.name()
             : manualAcceptance != null
                 ? "MANUALLY_ACCEPTED"
-                : payment.getStatus().name();
+                : manualRejection != null
+                    ? "MANUALLY_REJECTED"
+                    : payment.getStatus().name();
+        Evidence evidence = evidenceRepository == null ? null : evidenceRepository.findAllByPaymentIdOrderByReceivedAtAsc(payment.getId()).stream()
+            .filter(item -> item.getOrigin().name().equals("CUSTOMER") && item.getRawContent() != null)
+            .reduce((first, second) -> second).orElse(null);
+        PaymentView.CustomerEvidenceView customerEvidence = evidence == null ? null : new PaymentView.CustomerEvidenceView(
+            evidence.getProvider(),
+            moneyConverter.toMajorString(payment.getAmountMinor()),
+            payment.getCheckoutSession().getExternalReference(),
+            evidence.getReceivedAt(),
+            evidence.getRawContent()
+        );
 
         return new PaymentView(
             payment.getPublicId(),
@@ -58,7 +84,10 @@ public class PaymentService {
             payment.getCurrency(),
             payment.getProvider(),
             payment.getConfirmedAt(),
-            manualAcceptance == null ? null : manualAcceptance.getAcceptedAt()
+            manualAcceptance == null ? null : manualAcceptance.getAcceptedAt(),
+            manualRejection == null ? null : manualRejection.getRejectedAt(),
+            manualAcceptance != null ? manualAcceptance.getReason() : manualRejection == null ? null : manualRejection.getReason(),
+            customerEvidence
         );
     }
 

@@ -1,5 +1,6 @@
 import type {
   ManualAcceptance,
+  ManualRejection,
   MerchantAccount,
   OperatorSession,
   Payment,
@@ -41,6 +42,7 @@ type SessionWire = {
   merchant_id: string;
   merchant_name: string;
   environment: 'TEST' | 'LIVE';
+  csrf_token?: string | null;
 };
 
 type PaymentWire = {
@@ -54,6 +56,9 @@ type PaymentWire = {
   provider: string | null;
   confirmed_at: string | null;
   manually_accepted_at: string | null;
+  manually_rejected_at: string | null;
+  manual_decision_reason: string | null;
+  customer_evidence: {channel: string | null; amount: string; external_reference: string; submitted_at: string; message: string} | null;
 };
 
 type PaymentListItemWire = PaymentWire & {
@@ -68,6 +73,13 @@ type PaymentPageWire = {
   size: number;
   total_items: number;
   total_pages: number;
+};
+
+type ManualRejectionWire = {
+  payment_id: string;
+  status: 'MANUALLY_REJECTED';
+  reason: string | null;
+  rejected_at: string;
 };
 
 type ManualAcceptanceWire = {
@@ -92,6 +104,7 @@ type ApiErrorWire = {error?: {code?: string; message?: string}};
 
 type RequestOptions = RequestInit & {csrf?: boolean};
 
+let csrfToken: string | null = sessionStorage.getItem('verox_csrf_token');
 function readCookie(name: string): string | null {
   const prefix = `${encodeURIComponent(name)}=`;
   for (const entry of document.cookie.split(';')) {
@@ -106,7 +119,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
   if (options.csrf) {
-    const csrf = readCookie('VEROX_CSRF');
+    const csrf = csrfToken || readCookie('VEROX_CSRF');
     if (!csrf) throw new PlatformCsrfUnavailableError();
     headers.set('X-VEROX-CSRF', csrf);
   }
@@ -159,6 +172,9 @@ function mapPayment(dto: PaymentWire): Payment {
     provider: dto.provider,
     confirmedAt: dto.confirmed_at,
     manuallyAcceptedAt: dto.manually_accepted_at,
+    manuallyRejectedAt: dto.manually_rejected_at,
+    manualDecisionReason: dto.manual_decision_reason,
+    customerEvidence: dto.customer_evidence ? {channel: dto.customer_evidence.channel, amount: dto.customer_evidence.amount, externalReference: dto.customer_evidence.external_reference, submittedAt: dto.customer_evidence.submitted_at, message: dto.customer_evidence.message} : null,
   };
 }
 
@@ -194,6 +210,8 @@ function mapChannel(dto: PaymentChannelWire): PaymentChannel {
   };
 }
 
+function mapRejection(dto: ManualRejectionWire): ManualRejection { return {paymentId: dto.payment_id, status: dto.status, reason: dto.reason, rejectedAt: dto.rejected_at}; }
+
 function mapAcceptance(dto: ManualAcceptanceWire): ManualAcceptance {
   return {
     paymentId: dto.payment_id,
@@ -204,17 +222,17 @@ function mapAcceptance(dto: ManualAcceptanceWire): ManualAcceptance {
 }
 
 export const platformApi = {
-  login: async (username: string, password: string): Promise<OperatorSession> =>
-    mapSession(await request<SessionWire>('/platform/v1/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({username, password}),
-    })),
+  login: async (username: string, password: string): Promise<OperatorSession> => {
+    const dto = await request<SessionWire>('/platform/v1/auth/login', {method: 'POST', body: JSON.stringify({username, password})});
+    csrfToken = dto.csrf_token || null;
+    if (csrfToken) sessionStorage.setItem('verox_csrf_token', csrfToken);
+    return mapSession(dto);
+  },
 
   session: async (): Promise<OperatorSession> =>
     mapSession(await request<SessionWire>('/platform/v1/auth/session')),
 
-  logout: async (): Promise<void> =>
-    request<void>('/platform/v1/auth/logout', {method: 'POST', csrf: true}),
+  logout: async (): Promise<void> => { await request<void>('/platform/v1/auth/logout', {method: 'POST', csrf: true}); csrfToken = null; sessionStorage.removeItem('verox_csrf_token'); },
 
   account: async (): Promise<MerchantAccount> =>
     mapSession(await request<SessionWire>('/platform/v1/account')),
@@ -237,6 +255,11 @@ export const platformApi = {
       method: 'POST',
       csrf: true,
       body: JSON.stringify({reason: reason?.trim() || null}),
+    })),
+
+  rejectManually: async (paymentId: string, reason?: string): Promise<ManualRejection> =>
+    mapRejection(await request<ManualRejectionWire>(`/platform/v1/payments/${encodeURIComponent(paymentId)}/manual-rejection`, {
+      method: 'POST', csrf: true, body: JSON.stringify({reason: reason?.trim() || null}),
     })),
 
   paymentChannels: async (): Promise<PaymentChannel[]> =>

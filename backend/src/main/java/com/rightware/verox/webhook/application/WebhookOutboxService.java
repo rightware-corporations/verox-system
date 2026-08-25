@@ -5,6 +5,7 @@ import com.rightware.verox.merchant.domain.Merchant;
 import com.rightware.verox.merchant.repository.MerchantRepository;
 import com.rightware.verox.payment.application.PaymentConfirmedEvent;
 import com.rightware.verox.pilot.application.PaymentManuallyAcceptedEvent;
+import com.rightware.verox.pilot.application.PaymentManuallyRejectedEvent;
 import com.rightware.verox.webhook.domain.WebhookDelivery;
 import com.rightware.verox.webhook.domain.WebhookEndpoint;
 import com.rightware.verox.webhook.domain.WebhookEndpointStatus;
@@ -27,6 +28,7 @@ public class WebhookOutboxService {
 
     private static final String PAYMENT_CONFIRMED = "payment.confirmed";
     private static final String PAYMENT_MANUALLY_ACCEPTED = "payment.manually_accepted";
+    private static final String PAYMENT_MANUALLY_REJECTED = "payment.manually_rejected";
 
     private final MerchantRepository merchantRepository;
     private final WebhookEndpointRepository endpointRepository;
@@ -128,6 +130,22 @@ public class WebhookOutboxService {
         ensureDelivery(event, accepted.merchantId());
         return event;
     }
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public WebhookEvent enqueuePaymentManuallyRejected(PaymentManuallyRejectedEvent rejected) {
+        WebhookEvent existing = eventRepository.findByMerchantIdAndTypeAndAggregateTypeAndAggregatePublicId(rejected.merchantId(), PAYMENT_MANUALLY_REJECTED, "PAYMENT", rejected.paymentId()).orElse(null);
+        if (existing != null) { ensureDelivery(existing, rejected.merchantId()); return existing; }
+        Merchant merchant = merchantRepository.findById(rejected.merchantId()).orElseThrow(() -> new IllegalStateException("Merchant was not found for webhook event"));
+        Instant createdAt = rejected.manuallyRejectedAt() == null ? Instant.now() : rejected.manuallyRejectedAt();
+        String eventPublicId = resourceIdGenerator.generate("evt");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("payment_id", rejected.paymentId()); data.put("checkout_session_id", rejected.checkoutSessionId()); data.put("external_reference", rejected.externalReference()); data.put("amount", rejected.amount()); data.put("currency", rejected.currency()); data.put("status", rejected.status()); data.put("effective_status", "MANUALLY_REJECTED"); data.put("manually_rejected_at", rejected.manuallyRejectedAt());
+        Map<String, Object> payload = new LinkedHashMap<>(); payload.put("id", eventPublicId); payload.put("type", PAYMENT_MANUALLY_REJECTED); payload.put("created_at", createdAt); payload.put("data", data);
+        try {
+            WebhookEvent event = eventRepository.save(new WebhookEvent(eventPublicId, merchant, PAYMENT_MANUALLY_REJECTED, "PAYMENT", rejected.paymentId(), jsonMapper.writeValueAsString(payload), createdAt));
+            ensureDelivery(event, rejected.merchantId()); return event;
+        } catch (JacksonException exception) { throw new IllegalStateException("Unable to serialize webhook event payload", exception); }
+    }
+
     private void ensureDelivery(WebhookEvent event, java.util.UUID merchantId) {
         WebhookEndpoint endpoint = endpointRepository.findByMerchantIdAndStatus(merchantId, WebhookEndpointStatus.ACTIVE)
             .orElse(null);

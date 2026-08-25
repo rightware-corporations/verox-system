@@ -17,7 +17,9 @@ public record HostedCheckoutBootstrapView(
     Instant expiresAt,
     String successUrl,
     String cancelUrl,
-    List<PaymentChannelView> paymentChannels
+    List<PaymentChannelView> paymentChannels,
+    boolean evidenceSubmitted,
+    Instant evidenceSubmittedAt
 ) {
     public record PaymentChannelView(
         String provider,

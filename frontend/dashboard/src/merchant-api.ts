@@ -17,6 +17,9 @@ export type PaymentWire = {
   provider: string | null;
   confirmed_at: string | null;
   manually_accepted_at: string | null;
+  manually_rejected_at?: string | null;
+  manual_decision_reason?: string | null;
+  customer_evidence?: {channel: string | null; amount: string; external_reference: string; submitted_at: string; message: string} | null;
 };
 
 export type CheckoutSessionWire = {
@@ -67,6 +70,9 @@ export function mapPayment(dto: PaymentWire): Payment {
     provider:dto.provider,
     confirmedAt:dto.confirmed_at,
     manuallyAcceptedAt:dto.manually_accepted_at,
+    manuallyRejectedAt:dto.manually_rejected_at ?? null,
+    manualDecisionReason:dto.manual_decision_reason ?? null,
+    customerEvidence:dto.customer_evidence ? {channel:dto.customer_evidence.channel, amount:dto.customer_evidence.amount, externalReference:dto.customer_evidence.external_reference, submittedAt:dto.customer_evidence.submitted_at, message:dto.customer_evidence.message} : null,
   };
 }
 

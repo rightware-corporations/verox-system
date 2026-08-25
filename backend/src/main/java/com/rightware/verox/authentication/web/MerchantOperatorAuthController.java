@@ -48,7 +48,7 @@ public class MerchantOperatorAuthController {
         Duration maxAge = Duration.between(java.time.Instant.now(), result.expiresAt());
         response.addHeader(HttpHeaders.SET_COOKIE, cookie(MerchantOperatorSessionFilter.SESSION_COOKIE, result.sessionToken(), true, maxAge));
         response.addHeader(HttpHeaders.SET_COOKIE, cookie(CSRF_COOKIE, result.csrfToken(), false, maxAge));
-        return SessionResponse.from(result.principal());
+        return SessionResponse.from(result.principal(), result.csrfToken());
     }
 
     @GetMapping("/session")
@@ -87,16 +87,12 @@ public class MerchantOperatorAuthController {
         String operatorDisplayName,
         String merchantId,
         String merchantName,
-        String environment
+        String environment,
+        String csrfToken
     ) {
-        static SessionResponse from(MerchantOperatorPrincipal principal) {
-            return new SessionResponse(
-                principal.operatorId().toString(),
-                principal.operatorDisplayName(),
-                principal.merchantId().toString(),
-                principal.merchantName(),
-                principal.environment().name()
-            );
+        static SessionResponse from(MerchantOperatorPrincipal principal) { return from(principal, null); }
+        static SessionResponse from(MerchantOperatorPrincipal principal, String csrfToken) {
+            return new SessionResponse(principal.operatorId().toString(), principal.operatorDisplayName(), principal.merchantId().toString(), principal.merchantName(), principal.environment().name(), csrfToken);
         }
     }
 }

@@ -27,6 +27,8 @@ export type HostedCheckout = {
   successUrl:string;
   cancelUrl:string;
   paymentChannels:HostedPaymentChannel[];
+  evidenceSubmitted:boolean;
+  evidenceSubmittedAt:string|null;
 };
 
 type HostedPaymentChannelWire={
@@ -37,8 +39,9 @@ type HostedCheckoutWire={
   checkout_session_id:string;payment_id:string;merchant_display_name:string;external_reference:string;
   description:string|null;amount:string;currency:string;checkout_status:CheckoutState;
   payment_status:CheckoutPaymentState;effective_payment_status:CheckoutEffectivePaymentState;
-  expires_at:string;success_url:string;cancel_url:string;payment_channels:HostedPaymentChannelWire[];
+  expires_at:string;  success_url:string;cancel_url:string;payment_channels:HostedPaymentChannelWire[];evidence_submitted?:boolean;evidence_submitted_at?:string|null;
 };
+
 type ApiErrorWire={error?:{code?:string;message?:string}};
 
 const DEFAULT_BACKEND_ORIGIN='https://verox-backend-production.up.railway.app';
@@ -55,7 +58,8 @@ function mapCheckout(dto:HostedCheckoutWire):HostedCheckout{return{
   checkoutStatus:dto.checkout_status,paymentStatus:dto.payment_status,effectivePaymentStatus:dto.effective_payment_status,
   expiresAt:dto.expires_at,successUrl:dto.success_url,cancelUrl:dto.cancel_url,
   paymentChannels:dto.payment_channels.map(channel=>({provider:channel.provider,displayName:channel.display_name,kind:channel.kind,
-    enabled:channel.enabled,recipientDisplay:channel.recipient_display,recipientName:channel.recipient_name,instructions:channel.instructions}))
+    enabled:channel.enabled,recipientDisplay:channel.recipient_display,recipientName:channel.recipient_name,instructions:channel.instructions})),
+  evidenceSubmitted:Boolean(dto.evidence_submitted),evidenceSubmittedAt:dto.evidence_submitted_at??null
 }}
 
 async function request<T>(checkoutSessionId:string,capability:string,path='',options:RequestInit={}):Promise<T>{

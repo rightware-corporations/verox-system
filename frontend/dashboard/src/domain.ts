@@ -8,7 +8,7 @@ export type PaymentCoreState =
   | 'FAILED'
   | 'EXPIRED';
 
-export type PaymentEffectiveState = PaymentCoreState | 'MANUALLY_ACCEPTED';
+export type PaymentEffectiveState = PaymentCoreState | 'MANUALLY_ACCEPTED' | 'MANUALLY_REJECTED';
 export type PaymentChannelStatus = 'ACTIVE' | 'INACTIVE';
 export type CheckoutState = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
 
@@ -37,6 +37,17 @@ export type Payment = {
   provider: string | null;
   confirmedAt: string | null;
   manuallyAcceptedAt: string | null;
+  manuallyRejectedAt: string | null;
+  manualDecisionReason: string | null;
+  customerEvidence: CustomerEvidence | null;
+};
+
+export type CustomerEvidence = {
+  channel: string | null;
+  amount: string;
+  externalReference: string;
+  submittedAt: string;
+  message: string;
 };
 
 export type PaymentListItem = Payment & {
@@ -77,6 +88,13 @@ export type OperationalCapability = {
   canUsePilotManualAcceptance: boolean;
   source: 'SERVER_CONFIGURATION' | 'UNAVAILABLE';
 };
+export type ManualRejection = {
+  paymentId: string;
+  status: 'MANUALLY_REJECTED';
+  reason: string | null;
+  rejectedAt: string;
+};
+
 export type ManualAcceptance = {
   paymentId: string;
   status: 'MANUALLY_ACCEPTED';
@@ -103,14 +121,21 @@ export type PaymentSemantic = {
 
 export function paymentSemantic(status: PaymentEffectiveState): PaymentSemantic {
   switch (status) {
-    case 'PENDING': return {label:'Pending verification', tone:'neutral', provenance:'CORE'};
-    case 'VERIFYING': return {label:'Verifying', tone:'active', provenance:'CORE'};
-    case 'CONFIRMED': return {label:'Confirmed', tone:'success', provenance:'CORE'};
-    case 'REVIEW_REQUIRED': return {label:'Review required', tone:'warning', provenance:'CORE'};
-    case 'FAILED': return {label:'Failed', tone:'danger', provenance:'CORE'};
-    case 'EXPIRED': return {label:'Expired', tone:'neutral', provenance:'CORE'};
-    case 'MANUALLY_ACCEPTED': return {label:'Accepted manually', tone:'warning', provenance:'MANUAL'};
+    case 'PENDING': return {label:'Pagamento por confirmar', tone:'neutral', provenance:'CORE'};
+    case 'VERIFYING': return {label:'Pagamento por confirmar', tone:'active', provenance:'CORE'};
+    case 'CONFIRMED': return {label:'Pagamento confirmado', tone:'success', provenance:'CORE'};
+    case 'REVIEW_REQUIRED': return {label:'Precisa de confirmação', tone:'warning', provenance:'CORE'};
+    case 'FAILED': return {label:'Pagamento não confirmado', tone:'danger', provenance:'CORE'};
+    case 'EXPIRED': return {label:'Pagamento expirado', tone:'neutral', provenance:'CORE'};
+    case 'MANUALLY_ACCEPTED': return {label:'Pagamento confirmado', tone:'success', provenance:'MANUAL'};
+    case 'MANUALLY_REJECTED': return {label:'Pagamento não confirmado', tone:'danger', provenance:'MANUAL'};
   }
+}
+
+export function canRejectManually(payment: Payment): boolean {
+  if (payment.effectiveStatus === 'MANUALLY_REJECTED' || payment.effectiveStatus === 'MANUALLY_ACCEPTED') return false;
+  if (payment.status === 'CONFIRMED') return false;
+  return payment.status === 'PENDING' || payment.status === 'REVIEW_REQUIRED';
 }
 
 export function canAcceptManually(payment: Payment): boolean {

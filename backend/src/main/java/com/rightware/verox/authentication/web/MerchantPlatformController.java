@@ -10,6 +10,8 @@ import com.rightware.verox.paymentchannel.application.PaymentChannelService;
 import com.rightware.verox.paymentchannel.application.PaymentChannelView;
 import com.rightware.verox.pilot.application.PilotManualPaymentAcceptanceService;
 import com.rightware.verox.pilot.application.PilotManualPaymentAcceptanceView;
+import com.rightware.verox.pilot.application.PilotManualPaymentRejectionService;
+import com.rightware.verox.pilot.application.PilotManualPaymentRejectionView;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,17 +26,20 @@ public class MerchantPlatformController {
     private final PaymentService paymentService;
     private final PaymentChannelService paymentChannelService;
     private final PilotManualPaymentAcceptanceService manualAcceptanceService;
+    private final PilotManualPaymentRejectionService manualRejectionService;
 
     public MerchantPlatformController(
         PaymentFeedService paymentFeedService,
         PaymentService paymentService,
         PaymentChannelService paymentChannelService,
-        PilotManualPaymentAcceptanceService manualAcceptanceService
+        PilotManualPaymentAcceptanceService manualAcceptanceService,
+        PilotManualPaymentRejectionService manualRejectionService
     ) {
         this.paymentFeedService = paymentFeedService;
         this.paymentService = paymentService;
         this.paymentChannelService = paymentChannelService;
         this.manualAcceptanceService = manualAcceptanceService;
+        this.manualRejectionService = manualRejectionService;
     }
 
     @GetMapping("/account")
@@ -74,6 +79,15 @@ public class MerchantPlatformController {
         @Valid @RequestBody ManualAcceptanceRequest request
     ) {
         return manualAcceptanceService.accept(principal, paymentId, request.reason());
+    }
+
+    @PostMapping("/payments/{paymentId}/manual-rejection")
+    public PilotManualPaymentRejectionView rejectManually(
+        @AuthenticationPrincipal MerchantOperatorPrincipal principal,
+        @PathVariable String paymentId,
+        @Valid @RequestBody ManualAcceptanceRequest request
+    ) {
+        return manualRejectionService.reject(principal, paymentId, request.reason());
     }
 
     @GetMapping("/payment-channels")
