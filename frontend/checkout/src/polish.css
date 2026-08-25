@@ -1,0 +1,14 @@
+/* Product UI freeze polish — presentation only. */
+html,body,#root{max-width:100%;overflow-x:hidden}
+.v2-page,.v2-shell,.v2-content,.v2-section,.v2-state,.v2-pay-card,.v2-provider,.v2-provider-copy,.v2-page-heading,.v2-hero{min-width:0}
+.v2-page h1,.v2-page h2,.v2-page p,.v2-page strong,.v2-page span,.v2-page small{overflow-wrap:anywhere}
+button,textarea{outline-offset:3px}button:focus-visible,textarea:focus-visible{outline:2px solid #7cf4ef}
+.product-footer{justify-content:center;text-align:center}.product-footer>div{display:grid;gap:4px}.product-footer span{font-weight:700;letter-spacing:.02em}.product-footer small{font-size:10px;opacity:.58}
+.v2-provider,.v2-primary,.v2-back,.v2-recipient button{min-height:44px}
+.v2-hero-meta strong,.v2-pay-card-ref strong,.v2-recipient strong,.v2-state-meta strong{word-break:break-word;overflow-wrap:anywhere}
+.v2-field textarea{width:100%;max-width:100%;min-height:190px;resize:vertical;overflow-wrap:anywhere;word-break:break-word}
+.v2-state-meta{min-width:0}.v2-state-meta>div{min-width:0}.v2-state-meta strong{max-width:100%}
+.v2-note,.v2-critical,.v2-evidence-guide,.v2-state-callout{line-height:1.55}
+.v2-page-heading p,.v2-state-body,.v2-howto p,.v2-note p,.v2-critical p{max-width:68ch}
+.v2-action-dock{max-width:100%}.v2-primary{max-width:100%}
+@media(max-width:430px){.v2-shell{width:100%;max-width:100%}.v2-content{padding-left:16px!important;padding-right:16px!important}.v2-header{gap:10px}.v2-secure{font-size:10px}.v2-wordmark span{display:none}.v2-steps{gap:6px}.v2-step b{font-size:9px}.v2-money strong{font-size:clamp(34px,12vw,48px)}.v2-provider{padding-left:12px;padding-right:12px}.v2-provider-copy small{white-space:normal}.v2-recipient{align-items:flex-start;gap:12px}.v2-recipient>div{min-width:0}.v2-recipient button{flex:0 0 auto}.v2-state-meta{grid-template-columns:1fr!important}.v2-state-meta>div{border-right:0!important;border-bottom:1px solid rgba(255,255,255,.08)}.v2-state-meta>div:last-child{border-bottom:0}.product-footer{padding-bottom:calc(18px + env(safe-area-inset-bottom))}}

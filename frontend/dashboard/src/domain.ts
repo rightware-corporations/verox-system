@@ -88,6 +88,7 @@ export type OperationalCapability = {
   canUsePilotManualAcceptance: boolean;
   source: 'SERVER_CONFIGURATION' | 'UNAVAILABLE';
 };
+
 export type ManualRejection = {
   paymentId: string;
   status: 'MANUALLY_REJECTED';
@@ -121,14 +122,14 @@ export type PaymentSemantic = {
 
 export function paymentSemantic(status: PaymentEffectiveState): PaymentSemantic {
   switch (status) {
-    case 'PENDING': return {label:'Pagamento por confirmar', tone:'neutral', provenance:'CORE'};
-    case 'VERIFYING': return {label:'Pagamento por confirmar', tone:'active', provenance:'CORE'};
+    case 'PENDING': return {label:'Aguardando confirmação', tone:'neutral', provenance:'CORE'};
+    case 'VERIFYING': return {label:'Em verificação', tone:'active', provenance:'CORE'};
     case 'CONFIRMED': return {label:'Pagamento confirmado', tone:'success', provenance:'CORE'};
-    case 'REVIEW_REQUIRED': return {label:'Precisa de confirmação', tone:'warning', provenance:'CORE'};
-    case 'FAILED': return {label:'Pagamento não confirmado', tone:'danger', provenance:'CORE'};
+    case 'REVIEW_REQUIRED': return {label:'Requer atenção', tone:'warning', provenance:'CORE'};
+    case 'FAILED': return {label:'Pagamento não concluído', tone:'danger', provenance:'CORE'};
     case 'EXPIRED': return {label:'Pagamento expirado', tone:'neutral', provenance:'CORE'};
     case 'MANUALLY_ACCEPTED': return {label:'Pagamento confirmado', tone:'success', provenance:'MANUAL'};
-    case 'MANUALLY_REJECTED': return {label:'Pagamento não confirmado', tone:'danger', provenance:'MANUAL'};
+    case 'MANUALLY_REJECTED': return {label:'Pagamento não recebido', tone:'danger', provenance:'MANUAL'};
   }
 }
 
