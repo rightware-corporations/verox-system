@@ -11,17 +11,18 @@ import com.rightware.verox.evidence.domain.EvidenceIngestSource;
 import com.rightware.verox.evidence.domain.EvidenceKind;
 import com.rightware.verox.payment.domain.Payment;
 import com.rightware.verox.payment.repository.PaymentRepository;
+import com.rightware.verox.paymentchannel.application.PaymentChannelService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Locale;
 
 @Service
 public class CustomerMessageEvidenceIngestionService {
-
-    private static final String MVP_PROVIDER = "MPESA";
 
     private final CheckoutSessionRepository checkoutSessionRepository;
     private final PaymentRepository paymentRepository;
@@ -29,6 +30,26 @@ public class CustomerMessageEvidenceIngestionService {
     private final ApplicationEventPublisher eventPublisher;
     private final CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService;
     private final RateLimitGuard rateLimitGuard;
+    private final PaymentChannelService paymentChannelService;
+
+    @Autowired
+    public CustomerMessageEvidenceIngestionService(
+        CheckoutSessionRepository checkoutSessionRepository,
+        PaymentRepository paymentRepository,
+        EvidenceService evidenceService,
+        ApplicationEventPublisher eventPublisher,
+        CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService,
+        RateLimitGuard rateLimitGuard,
+        PaymentChannelService paymentChannelService
+    ) {
+        this.checkoutSessionRepository = checkoutSessionRepository;
+        this.paymentRepository = paymentRepository;
+        this.evidenceService = evidenceService;
+        this.eventPublisher = eventPublisher;
+        this.checkoutSubmissionCapabilityService = checkoutSubmissionCapabilityService;
+        this.rateLimitGuard = rateLimitGuard;
+        this.paymentChannelService = paymentChannelService;
+    }
 
     public CustomerMessageEvidenceIngestionService(
         CheckoutSessionRepository checkoutSessionRepository,
@@ -38,30 +59,38 @@ public class CustomerMessageEvidenceIngestionService {
         CheckoutSubmissionCapabilityService checkoutSubmissionCapabilityService,
         RateLimitGuard rateLimitGuard
     ) {
-        this.checkoutSessionRepository = checkoutSessionRepository;
-        this.paymentRepository = paymentRepository;
-        this.evidenceService = evidenceService;
-        this.eventPublisher = eventPublisher;
-        this.checkoutSubmissionCapabilityService =
-            checkoutSubmissionCapabilityService;
-        this.rateLimitGuard = rateLimitGuard;
+        this(
+            checkoutSessionRepository,
+            paymentRepository,
+            evidenceService,
+            eventPublisher,
+            checkoutSubmissionCapabilityService,
+            rateLimitGuard,
+            null
+        );
+    }
+
+    @Deprecated
+    public CustomerMessageEvidenceView ingest(
+        String checkoutSessionId,
+        String checkoutCapability,
+        String content
+    ) {
+        return ingest(checkoutSessionId, checkoutCapability, "MPESA", content);
     }
 
     @Transactional
     public CustomerMessageEvidenceView ingest(
         String checkoutSessionId,
         String checkoutCapability,
+        String provider,
         String content
     ) {
-        CheckoutSession session =
-            checkoutSessionRepository
-                .findByPublicId(checkoutSessionId)
-                .orElseThrow(this::checkoutNotFound);
+        CheckoutSession session = checkoutSessionRepository
+            .findByPublicId(checkoutSessionId)
+            .orElseThrow(this::checkoutNotFound);
 
-        if (!checkoutSubmissionCapabilityService.matches(
-            session,
-            checkoutCapability
-        )) {
+        if (!checkoutSubmissionCapabilityService.matches(session, checkoutCapability)) {
             throw checkoutNotFound();
         }
 
@@ -83,37 +112,28 @@ public class CustomerMessageEvidenceIngestionService {
             );
         }
 
-        /*
-         * Security ordering matters:
-         *
-         * - invalid capabilities never consume the legitimate checkout bucket;
-         * - expired/closed checkouts do not consume it;
-         * - rate limiting happens before Payment read, Evidence persistence
-         *   and verification-event publication.
-         */
-        rateLimitGuard.checkCheckoutSubmission(
-            session.getId()
+        rateLimitGuard.checkCheckoutSubmission(session.getId());
+
+        Payment payment = paymentRepository
+            .findByCheckoutSessionId(session.getId())
+            .orElseThrow(() -> new ApiException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "PAYMENT_STATE_ERROR",
+                "Checkout Session exists without its Payment."
+            ));
+
+        String normalizedProvider = normalizeProvider(provider);
+        validateActiveProvider(session, normalizedProvider);
+
+        Evidence evidence = evidenceService.registerCustomerRaw(
+            payment,
+            EvidenceKind.SMS,
+            EvidenceIngestSource.HOSTED_CHECKOUT,
+            normalizedProvider,
+            content,
+            null,
+            receivedAt
         );
-
-        Payment payment =
-            paymentRepository
-                .findByCheckoutSessionId(session.getId())
-                .orElseThrow(() -> new ApiException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "PAYMENT_STATE_ERROR",
-                    "Checkout Session exists without its Payment."
-                ));
-
-        Evidence evidence =
-            evidenceService.registerCustomerRaw(
-                payment,
-                EvidenceKind.SMS,
-                EvidenceIngestSource.HOSTED_CHECKOUT,
-                MVP_PROVIDER,
-                content,
-                null,
-                receivedAt
-            );
 
         eventPublisher.publishEvent(
             new EvidenceIngestedEvent(
@@ -134,6 +154,34 @@ public class CustomerMessageEvidenceIngestionService {
             evidence.getIngestSource().name(),
             evidence.getProvider(),
             evidence.getReceivedAt()
+        );
+    }
+
+    private String normalizeProvider(String provider) {
+        if (provider == null || provider.isBlank()) {
+            throw invalidProvider();
+        }
+        return provider.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private void validateActiveProvider(CheckoutSession session, String provider) {
+        if (paymentChannelService == null) {
+            return;
+        }
+        boolean allowed = paymentChannelService
+            .listActiveForCheckout(session.getMerchant().getId(), session.getEnvironment())
+            .stream()
+            .anyMatch(channel -> channel.provider().equalsIgnoreCase(provider));
+        if (!allowed) {
+            throw invalidProvider();
+        }
+    }
+
+    private ApiException invalidProvider() {
+        return new ApiException(
+            HttpStatus.BAD_REQUEST,
+            "INVALID_PAYMENT_PROVIDER",
+            "Selected payment provider is not available for this checkout."
         );
     }
 

@@ -37,6 +37,7 @@ public class CustomerMessageEvidenceController {
         CustomerMessageEvidenceView view = ingestionService.ingest(
             checkoutSessionId,
             checkoutCapability,
+            request.provider(),
             request.content()
         );
         return ResponseEntity.accepted().body(view);

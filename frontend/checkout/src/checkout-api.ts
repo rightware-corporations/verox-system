@@ -39,7 +39,8 @@ type HostedCheckoutWire={
   checkout_session_id:string;payment_id:string;merchant_display_name:string;external_reference:string;
   description:string|null;amount:string;currency:string;checkout_status:CheckoutState;
   payment_status:CheckoutPaymentState;effective_payment_status:CheckoutEffectivePaymentState;
-  expires_at:string;  success_url:string;cancel_url:string;payment_channels:HostedPaymentChannelWire[];evidence_submitted?:boolean;evidence_submitted_at?:string|null;
+  expires_at:string;success_url:string;cancel_url:string;payment_channels:HostedPaymentChannelWire[];
+  evidence_submitted?:boolean;evidence_submitted_at?:string|null;
 };
 
 type ApiErrorWire={error?:{code?:string;message?:string}};
@@ -74,7 +75,7 @@ async function request<T>(checkoutSessionId:string,capability:string,path='',opt
 
 export const checkoutApi={
   bootstrap:async(checkoutSessionId:string,capability:string)=>mapCheckout(await request<HostedCheckoutWire>(checkoutSessionId,capability)),
-  submitEvidence:async(checkoutSessionId:string,capability:string,content:string)=>request<unknown>(checkoutSessionId,capability,'/evidence/message',{method:'POST',body:JSON.stringify({content})}),
+  submitEvidence:async(checkoutSessionId:string,capability:string,provider:string,content:string)=>request<unknown>(checkoutSessionId,capability,'/evidence/message',{method:'POST',body:JSON.stringify({provider,content})}),
 };
 
 export function readCheckoutContext(){
