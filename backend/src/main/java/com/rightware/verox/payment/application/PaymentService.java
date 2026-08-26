@@ -68,6 +68,9 @@ public class PaymentService {
         Evidence evidence = evidenceRepository == null ? null : evidenceRepository.findAllByPaymentIdOrderByReceivedAtAsc(payment.getId()).stream()
             .filter(item -> item.getOrigin().name().equals("CUSTOMER") && item.getRawContent() != null)
             .reduce((first, second) -> second).orElse(null);
+        String displayProvider = payment.getProvider() != null
+            ? payment.getProvider()
+            : evidence == null ? null : evidence.getProvider();
         PaymentView.CustomerEvidenceView customerEvidence = evidence == null ? null : new PaymentView.CustomerEvidenceView(
             evidence.getProvider(),
             moneyConverter.toMajorString(payment.getAmountMinor()),
@@ -84,7 +87,7 @@ public class PaymentService {
             effectiveStatus,
             moneyConverter.toMajorString(payment.getAmountMinor()),
             payment.getCurrency(),
-            payment.getProvider(),
+            displayProvider,
             payment.getConfirmedAt(),
             manualAcceptance == null ? null : manualAcceptance.getAcceptedAt(),
             manualRejection == null ? null : manualRejection.getRejectedAt(),
